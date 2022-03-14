@@ -1,0 +1,75 @@
+---
+title: "Dog Thermal Relations"
+author: "Aziz Ur Rehman Zafar"
+date: "3/12/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r find_slope}
+library(mblm)
+find_slope = function(row_data){
+  temp_df = data.frame(Stress = row_data, x = seq_along(row_data))
+  median_lm = mblm(Stress ~ x, data = temp_df)
+  #print(summary(median_lm))
+  return(coef(median_lm)[2])
+}
+```
+
+```{r JJ data}
+library(readxl)
+library(dplyr)
+library(MASS)
+library(quantreg)
+JJ_ear = read_xlsx("June-July trials/June-July dog exercise trial data (ear temps).xlsx")
+JJ_ear = JJ_ear[-c(61:62),]
+JJ_regular = read_xlsx("June-July trials/June-July trial regular imaging data.xlsx")
+#JJ_thermal = read_xlsx("June-July trials/June-July trials thermal imaging data.xlsx")
+
+#JJ_merged = merge(JJ_ear, JJ_regular, by = c("Dog's Name"))
+#JJ_merged = write.csv(JJ_merged, "merged_JJ.csv")
+
+JJ_merged = read_xlsx("June-July trials/merged_JJ.xlsx", sheet = 2) 
+JJ_merged_eartemp = JJ_merged %>% dplyr::select(starts_with("T(ear)"))
+JJ_merged = cbind(JJ_merged,
+                      Slopes =apply(X = JJ_merged_eartemp, MARGIN= 1,
+                                    FUN = find_slope))
+colnames(JJ_merged)[2:11] = gsub(" ", "_",colnames(JJ_merged)[2:11])
+formula1 = as.formula(paste("Slopes ~", paste(gsub(" ", "_",colnames(JJ_merged)[2:11]), 
+                            collapse = " +"), sep = ""))
+lm1 = lm(formula1, data = JJ_merged)
+summary(lm1)
+AIC1 = stepAIC(lm1)
+AIC1$terms
+lm2 = lm( Slopes~ age_years + weight_lbs + ear_length_inches +Ear_morphology +Coat_length_cm+Coat_coloring+Coat_type +Gender, data=JJ_merged)
+summary(lm2)
+
+summary(lm(Slopes ~ Breed_standardized + Gender + Coat_coloring + Nose_length, data=JJ_merged))
+
+```
+
+```{r May data}
+May_ear = read_xlsx("May trials/May dog exercise trial data (ear temps).xlsx")
+JJ_ear = JJ_ear[-c(52:53),]
+May_regular = read_xlsx("May trials/May trial regular imaging data.xlsx")
+
+#May_merged = merge(May_ear, May_regular, by = c("Dog's Name"))
+#May_merged = write.csv(May_merged, "merged_May.csv")
+
+May_merged = read_xlsx("May trials/merged_May.xlsx", sheet = 2)
+May_merged_eartemp = May_merged %>% dplyr::select(starts_with("T(ear)"))
+May_merged = cbind(May_merged,
+                      Slopes =apply(X = May_merged_eartemp, MARGIN= 1,
+                                    FUN = find_slope))
+colnames(May_merged)[2:12] = gsub(" ", "_",colnames(May_merged)[2:12])
+formula2 = as.formula(paste("Slopes ~", paste(gsub(" ", "_",colnames(May_merged)[2:12]), 
+                            collapse = " +"), sep = ""))
+lmMay = lm(formula2, data = May_merged)
+summary(lmMay)
+
+hist(resid(lmMay))
+```
+
