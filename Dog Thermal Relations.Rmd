@@ -19,57 +19,244 @@ find_slope = function(row_data){
 }
 ```
 
+```{r impute}
+mode.for.impute = function(data.column){
+  unique_elements <- na.omit(unique(data.column)) 
+  #this finds the unique elements of the column,
+  #except for NA
+  table <- tabulate(match(data.column, unique_elements)) 
+  #tabulate will count the frequencies of each unique element in the column
+  unique_elements[table == max(table)] #this will identify the elements that 
+  #have the same frequency
+  #as the highest frequency identified by the tabulate function.
+  #Therefore, if there are multiple modes, this function will return a vector 
+  #of modes rather than 1 arbitrary mode.
+}
+impute = function(data.column){
+  set.seed(0) #here I will set a seed for the random number generator to ensure that
+  #my results are replicatable and I can test my code (it is tough to test code when
+  # random number generator returns different results for each run!)
+  categorical = T
+  if (is.numeric(data.column)){
+    imputing_statistic = mean(data.column, na.rm = T)
+    categorical = F
+    }
+  #The above statement checks if data in a column is quantitative
+  else {
+    imputing_statistic = mode.for.impute(data.column)
+    }
+  #Otherwise, the data in the column is categorical (provided it is not numeric)
+  if (categorical & length(imputing_statistic >1)){
+    #In the case that data is categorical and there are more than 1 nodes, I want
+    #to use randomly picked values for mode for each NA to attempt to preserve
+    #the variation in the data set. If I simply use 1 mode, then I may be skewing
+    #the data set and making my analysis biased towards the mode I have selected.
+    
+    indices.of.NAs = which(is.na(data.column)) 
+    num.of.NAs = length(indices.of.NAs)
+    modes = sample(imputing_statistic, num.of.NAs, replace = T)
+    
+    #Here, I am using sampling with replacement to randomly pick modes from the
+    #vector of modes. 
+    data.column = replace(data.column, indices.of.NAs, modes)
+    #replacing NAs with the randomly selected modes
+  }
+  else {data.column[is.na(data.column)] = imputing_statistic} #Otherwise, I can
+  #simply replace NAs with whatever statistic I have identified
+  data.column
+}
+imputeapply = function(data){
+  data.imputed = data.frame(lapply(data, impute))
+  #This applies impute to each column in data (in only one line!)
+  data.imputed
+}
+```
+```{r in_to_cm}
+in_to_cm = function(data_column){
+  return(data_column*2.54)
+}
+
+f.to.c <- function(x) (x - 32) / 1.8
+
+```
 ```{r JJ data}
 library(readxl)
 library(dplyr)
 library(MASS)
 library(quantreg)
-JJ_ear = read_xlsx("June-July trials/June-July dog exercise trial data (ear temps).xlsx")
-JJ_ear = JJ_ear[-c(61:62),]
-JJ_regular = read_xlsx("June-July trials/June-July trial regular imaging data.xlsx")
-#JJ_thermal = read_xlsx("June-July trials/June-July trials thermal imaging data.xlsx")
+library(caret)
+library(car)
+#JJ_ear = read_xlsx("June-July trials/June-July dog exercise trial data (ear temps).xlsx")
+#JJ_ear = JJ_ear[-c(61:62),]
+#JJ_regular = read_xlsx("June-July trials/June-July trial regular imaging data.xlsx")
+#JJ_thermal = read_xlsx("June-July trials/June-July trials thermal imaging data.xlsx", sheet = 2)
 
 #JJ_merged = merge(JJ_ear, JJ_regular, by = c("Dog's Name"))
+#JJ_merged = merge(JJ_merged,JJ_thermal, by = c("Dog's Name"))
 #JJ_merged = write.csv(JJ_merged, "merged_JJ.csv")
 
-JJ_merged = read_xlsx("June-July trials/merged_JJ.xlsx", sheet = 2) 
-JJ_merged_eartemp = JJ_merged %>% dplyr::select(starts_with("T(ear)"))
-JJ_merged = cbind(JJ_merged,
-                      Slopes =apply(X = JJ_merged_eartemp, MARGIN= 1,
+## if data processing is done, start here 
+
+JJ_merged_cleaned = read_xlsx("June-July trials/merged_JJ_2.xlsx", sheet = 2) 
+JJ_merged_eartemp = JJ_merged_cleaned %>% dplyr::select(starts_with("T(ear)"))
+JJ_merged_cleaned = cbind(JJ_merged_cleaned,
+                      Slopes_ear =apply(X = JJ_merged_eartemp, MARGIN= 1,
                                     FUN = find_slope))
-colnames(JJ_merged)[2:11] = gsub(" ", "_",colnames(JJ_merged)[2:11])
-formula1 = as.formula(paste("Slopes ~", paste(gsub(" ", "_",colnames(JJ_merged)[2:11]), 
+colnames(JJ_merged_cleaned)[2:14] = gsub(" ", "_",colnames(JJ_merged_cleaned)[2:14])
+colnames(JJ_merged_cleaned) = gsub(".x", "",colnames(JJ_merged_cleaned))
+colnames(JJ_merged_cleaned) = gsub("\\(", "",colnames(JJ_merged_cleaned))
+colnames(JJ_merged_cleaned) = gsub("\\)", "",colnames(JJ_merged_cleaned))
+colnames(JJ_merged_cleaned) = gsub(",", "",colnames(JJ_merged_cleaned))
+colnames(JJ_merged_cleaned)[10:11] = gsub("_in", "",colnames(JJ_merged_cleaned))[10:11]
+JJ_merged_cleaned$ear_length = in_to_cm(JJ_merged_cleaned$ear_length)
+JJ_merged_cleaned$Front_leg_height_to_shoulder = in_to_cm(JJ_merged_cleaned$Front_leg_height_to_shoulder)
+colnames(JJ_merged_cleaned) = gsub(",", "",colnames(JJ_merged_cleaned))
+formula1 = as.formula(paste("Slopes_ear ~", paste(colnames(JJ_merged_cleaned)[2:14], 
                             collapse = " +"), sep = ""))
-lm1 = lm(formula1, data = JJ_merged)
+#### Ear Temps
+lm1 = lm(formula1, data = JJ_merged_cleaned)
 summary(lm1)
-AIC1 = stepAIC(lm1)
-AIC1$terms
-lm2 = lm( Slopes~ age_years + weight_lbs + ear_length_inches +Ear_morphology +Coat_length_cm+Coat_coloring+Coat_type +Gender, data=JJ_merged)
-summary(lm2)
+AIC1 = stepAIC(lm1, trace = F, direction = "both")
 
-summary(lm(Slopes ~ Breed_standardized + Gender + Coat_coloring + Nose_length, data=JJ_merged))
+#AIC
+summary(lm(Slopes_ear ~ ., data=AIC1$model))
 
+
+#### Max Eye temps
+JJ_merged_eyetemp = JJ_merged_cleaned %>% dplyr::select(starts_with("M eye temp"))
+JJ_merged_cleaned = cbind(JJ_merged_cleaned,
+                      Slopes_eye =apply(X = JJ_merged_eyetemp, MARGIN= 1,
+                                    FUN = find_slope))
+formula2 = as.formula(paste("Slopes_eye ~", paste(colnames(JJ_merged_cleaned)[2:14], 
+                            collapse = " +"), sep = ""))
+lmEye = lm(formula2, data =JJ_merged_cleaned)
+summary(lmEye)
+AIC2 = stepAIC(lmEye, trace = F, direction = "both")
+#AIC
+summary(lm(Slopes_eye ~., data = AIC2$model))
+
+#### Max Mouth temps
+JJ_merged_mouthtemp = JJ_merged_cleaned %>% dplyr::select(starts_with("M mouth temp"))
+JJ_merged_cleaned = cbind(JJ_merged_cleaned,
+                      Slopes_mouth =apply(X = JJ_merged_mouthtemp, MARGIN= 1,
+                                    FUN = find_slope))
+formula3 = as.formula(paste("Slopes_mouth ~", paste(colnames(JJ_merged_cleaned)[2:14], 
+                            collapse = " +"), sep = ""))
+lmMouth = lm(formula3, data =JJ_merged_cleaned)
+summary(lmMouth)
+AIC3 = stepAIC(lmMouth, trace = F, direction = "both")
+summary(lm(Slopes_mouth ~., 
+    data = AIC3$model))
+#### Nose temps
+JJ_merged_nosetemp = JJ_merged_cleaned %>% dplyr::select(starts_with("M nose temp"))
+JJ_merged_cleaned = cbind(JJ_merged_cleaned,
+                      Slopes_nose =apply(X = JJ_merged_nosetemp, MARGIN= 1,
+                                    FUN = find_slope))
+formula4 = as.formula(paste("Slopes_nose ~", paste(colnames(JJ_merged_cleaned)[2:14], 
+                            collapse = " +"), sep = ""))
+lmNose = lm(formula4, data =JJ_merged_cleaned)
+summary(lmNose)
+AIC4 = stepAIC(lmNose, trace =F, direction = "both")
+summary(lm(Slopes_nose ~., 
+    data = AIC4$model))
 ```
 
 ```{r May data}
-May_ear = read_xlsx("May trials/May dog exercise trial data (ear temps).xlsx")
-JJ_ear = JJ_ear[-c(52:53),]
-May_regular = read_xlsx("May trials/May trial regular imaging data.xlsx")
+library(DMwR)
+# May_ear = read_xlsx("May trials/May dog exercise trial data (ear temps).xlsx")
+# May_ear = May_ear[-c(52:53),]
+# May_regular = read_xlsx("May trials/May trial regular imaging data.xlsx")
+# May_thermal = read_xlsx("May trials/May trial thermal imaging data.xlsx",sheet = 2)
+# May_merged = merge(May_ear, May_regular, by = c("Dog's Name"))
+# May_merged = merge(May_merged,May_thermal, by = c("Dog's Name"))
+# May_merged = write.csv(May_merged, "merged_May.csv")
 
-#May_merged = merge(May_ear, May_regular, by = c("Dog's Name"))
-#May_merged = write.csv(May_merged, "merged_May.csv")
+May_merged_cleaned = read_xlsx("May trials/merged_May_2.xlsx", sheet = 2) 
+colnames(May_merged_cleaned)[2:14] = gsub(" ", "_",colnames(May_merged_cleaned)[2:14])
+colnames(May_merged_cleaned) = gsub(".x", "",colnames(May_merged_cleaned))
+colnames(May_merged_cleaned) = gsub("\\(", "",colnames(May_merged_cleaned))
+colnames(May_merged_cleaned) = gsub("\\)", "",colnames(May_merged_cleaned))
+colnames(May_merged_cleaned) = gsub(",", "",colnames(May_merged_cleaned))
 
-May_merged = read_xlsx("May trials/merged_May.xlsx", sheet = 2)
-May_merged_eartemp = May_merged %>% dplyr::select(starts_with("T(ear)"))
-May_merged = cbind(May_merged,
-                      Slopes =apply(X = May_merged_eartemp, MARGIN= 1,
+May_merged_cleaned = imputeapply(May_merged_cleaned)
+May_merged_eartemp = May_merged_cleaned %>% dplyr::select(starts_with("Tear"))
+May_merged_cleaned = cbind(May_merged_cleaned,
+                      Slopes_ear =apply(X = May_merged_eartemp, MARGIN= 1,
                                     FUN = find_slope))
-colnames(May_merged)[2:12] = gsub(" ", "_",colnames(May_merged)[2:12])
-formula2 = as.formula(paste("Slopes ~", paste(gsub(" ", "_",colnames(May_merged)[2:12]), 
+formula1 = as.formula(paste("Slopes_ear ~", paste(colnames(May_merged_cleaned)[2:14], 
                             collapse = " +"), sep = ""))
-lmMay = lm(formula2, data = May_merged)
-summary(lmMay)
+lm1 = lm(formula1, data = May_merged_cleaned)
+summary(lm1)
+AIC1 = stepAIC(lm1, trace = F, direction = "both")
+summary(lm(Slopes_ear ~., data = AIC1$model))
+##
+May_merged_nosetemp = May_merged_cleaned %>% dplyr::select(starts_with("M.nose"))
+May_merged_cleaned = cbind(May_merged_cleaned,
+                      Slopes_nose =apply(X = May_merged_nosetemp, MARGIN= 1,
+                                    FUN = find_slope))
+formula2 = as.formula(paste("Slopes_nose ~", paste(colnames(May_merged_cleaned)[2:14],
+                            collapse = " +"), sep = ""))
+lm2 = lm(formula2, data = May_merged_cleaned)
+summary(lm2)
+AIC2 = stepAIC(lm2, trace = F, direction = "both")
+summary(lm(Slopes_nose ~., data = AIC2$model))
+##
+May_merged_eyetemp = May_merged_cleaned %>% dplyr::select(starts_with("M.eye"))
+May_merged_cleaned = cbind(May_merged_cleaned,
+                      Slopes_eye =apply(X = May_merged_eyetemp, MARGIN= 1,
+                                    FUN = find_slope))
+formula3 = as.formula(paste("Slopes_eye ~", paste(colnames(May_merged_cleaned)[2:14],
+                            collapse = " +"), sep = ""))
+lm3 = lm(formula3, data = May_merged_cleaned)
+summary(lm3)
+AIC3 = stepAIC(lm3, trace = F, direction = "both")
+summary(lm(Slopes_eye ~., data = AIC3$model))
+##
+May_merged_mouthtemp = May_merged_cleaned %>% dplyr::select(starts_with("Mac.Mouth"))
+May_merged_cleaned = cbind(May_merged_cleaned,
+                      Slopes_mouth =apply(X = May_merged_mouthtemp, MARGIN= 1,
+                                    FUN = find_slope))
+formula4 = as.formula(paste("Slopes_mouth ~", paste(colnames(May_merged_cleaned)[2:14],collapse = " +"), sep = ""))
+lm4 = lm(formula4, data = May_merged_cleaned)
+summary(lm4)
+AIC4 = stepAIC(lm4, trace = F, direction = "both")
+summary(lm(Slopes_mouth ~., data = AIC4$model))
+```
 
-hist(resid(lmMay))
+
+```{r ND data}
+#ND_ear = read_xlsx("November-December trials/November-December dog thermal relations trials (ear temps).xlsx")
+#ND_ear = ND_ear[-c(59:151),]
+#ND_regular = read_xlsx("November-December trials/November Trials Regular Imaging.xlsx")
+#ND_thermal = read_xlsx("November-December trials/November trials thermal imaging data.xlsx", sheet = 2)
+#ND_merged = merge(ND_ear, ND_regular, by = c("Dog's Name"))
+#ND_merged = merge(ND_merged, ND_thermal, by = c("Dog's Name"))
+#ND_merged = write.csv(ND_merged, "merged_ND.csv")
+
+##
+####
+ND_merged_cleaned = read_xlsx("November-December trials/merged_ND_2.xlsx", sheet = 2)
+colnames(ND_merged_cleaned)[2:14] = gsub(" ", "_",colnames(ND_merged_cleaned)[2:14])
+colnames(ND_merged_cleaned) = gsub(".x", "",colnames(ND_merged_cleaned))
+colnames(ND_merged_cleaned) = gsub("\\(", "",colnames(ND_merged_cleaned))
+colnames(ND_merged_cleaned) = gsub("\\)", "",colnames(ND_merged_cleaned))
+colnames(ND_merged_cleaned) = gsub(",", "",colnames(ND_merged_cleaned))
+ND_merged_cleaned$ear_length_in = in_to_cm(ND_merged_cleaned$ear_length_in)
+ND_merged_cleaned$Front_leg_height_to_shoulder_in = in_to_cm(ND_merged_cleaned$Front_leg_height_to_shoulder_in)
+colnames(ND_merged_cleaned)[10:11] = gsub("_in", "",colnames(ND_merged_cleaned)[10:11])
+ND_merged_cleaned[15:18] = f.to.c(ND_merged_cleaned[15:18])
+ND_merged_cleaned = imputeapply(ND_merged_cleaned)
+
+ND_merged_eartemp = ND_merged_cleaned %>% dplyr::select(starts_with("Tear"))
+ND_merged_cleaned = cbind(ND_merged_cleaned,
+                      Slopes_ear =apply(X = ND_merged_eartemp, MARGIN= 1,
+                                    FUN = find_slope))
+
+formula1 = as.formula(paste("Slopes_ear ~", paste(colnames(ND_merged_cleaned)[2:14], 
+                            collapse = " +"), sep = ""))
+lm1 = lm(formula1, data = ND_merged_cleaned)
+summary(lm1)
+
+
 ```
 
