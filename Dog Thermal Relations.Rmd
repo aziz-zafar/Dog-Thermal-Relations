@@ -9,7 +9,7 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r find_slope}
+```{r find_slope, echo =F}
 library(mblm)
 find_slope = function(row_data){
   temp_df = data.frame(Stress = row_data, x = seq_along(row_data))
@@ -19,7 +19,7 @@ find_slope = function(row_data){
 }
 ```
 
-```{r impute}
+```{r impute, echo =F}
 mode.for.impute = function(data.column){
   unique_elements <- na.omit(unique(data.column)) 
   #this finds the unique elements of the column,
@@ -71,7 +71,7 @@ imputeapply = function(data){
   data.imputed
 }
 ```
-```{r in_to_cm}
+```{r in_to_cm,echo=F}
 in_to_cm = function(data_column){
   return(data_column*2.54)
 }
@@ -79,13 +79,15 @@ in_to_cm = function(data_column){
 f.to.c <- function(x) (x - 32) / 1.8
 
 ```
-```{r JJ data}
+
+```{r JJ data, echo =F,message=F,warning=F}
 library(readxl)
 library(dplyr)
 library(MASS)
 library(quantreg)
 library(caret)
 library(car)
+library(tidyverse)
 #JJ_ear = read_xlsx("June-July trials/June-July dog exercise trial data (ear temps).xlsx")
 #JJ_ear = JJ_ear[-c(61:62),]
 #JJ_regular = read_xlsx("June-July trials/June-July trial regular imaging data.xlsx")
@@ -98,7 +100,8 @@ library(car)
 ## if data processing is done, start here 
 
 JJ_merged_cleaned = read_xlsx("June-July trials/merged_JJ_2.xlsx", sheet = 2) 
-JJ_merged_eartemp = JJ_merged_cleaned %>% dplyr::select(starts_with("T(ear)"))
+JJ_merged_eartemp = JJ_merged_cleaned %>% dplyr::select(starts_with("T(ear)"))%>%
+  dplyr::select(-1)
 JJ_merged_cleaned = cbind(JJ_merged_cleaned,
                       Slopes_ear =apply(X = JJ_merged_eartemp, MARGIN= 1,
                                     FUN = find_slope))
@@ -111,57 +114,86 @@ colnames(JJ_merged_cleaned)[10:11] = gsub("_in", "",colnames(JJ_merged_cleaned))
 JJ_merged_cleaned$ear_length = in_to_cm(JJ_merged_cleaned$ear_length)
 JJ_merged_cleaned$Front_leg_height_to_shoulder = in_to_cm(JJ_merged_cleaned$Front_leg_height_to_shoulder)
 colnames(JJ_merged_cleaned) = gsub(",", "",colnames(JJ_merged_cleaned))
+JJ_merged_cleaned$Breed_standardized = as.factor(JJ_merged_cleaned$Breed_standardized)
+JJ_merged_cleaned <- within(JJ_merged_cleaned, 
+                            Breed_standardized <- relevel(Breed_standardized, ref = "Mix"))
 formula1 = as.formula(paste("Slopes_ear ~", paste(colnames(JJ_merged_cleaned)[2:14], 
                             collapse = " +"), sep = ""))
 #### Ear Temps
+print("June July EAR Temperatures")
 lm1 = lm(formula1, data = JJ_merged_cleaned)
-summary(lm1)
+table = summary(lm1)
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 AIC1 = stepAIC(lm1, trace = F, direction = "both")
-
+print("June July EAR Temperatures -- BEST SUBSET")
 #AIC
-summary(lm(Slopes_ear ~ ., data=AIC1$model))
-
+table = summary(lm(Slopes_ear ~ ., data=AIC1$model))
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 
 #### Max Eye temps
-JJ_merged_eyetemp = JJ_merged_cleaned %>% dplyr::select(starts_with("M eye temp"))
+JJ_merged_eyetemp = JJ_merged_cleaned %>% dplyr::select(starts_with("M eye temp")) %>%
+  dplyr::select(-1)
 JJ_merged_cleaned = cbind(JJ_merged_cleaned,
                       Slopes_eye =apply(X = JJ_merged_eyetemp, MARGIN= 1,
                                     FUN = find_slope))
 formula2 = as.formula(paste("Slopes_eye ~", paste(colnames(JJ_merged_cleaned)[2:14], 
                             collapse = " +"), sep = ""))
+print("June July EYE Temperatures")
 lmEye = lm(formula2, data =JJ_merged_cleaned)
-summary(lmEye)
+table = summary(lmEye)
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 AIC2 = stepAIC(lmEye, trace = F, direction = "both")
 #AIC
-summary(lm(Slopes_eye ~., data = AIC2$model))
+print("June July EYE Temperatures -- BEST SUBSET")
+
+table =summary(lm(Slopes_eye ~., data = AIC2$model))
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 
 #### Max Mouth temps
-JJ_merged_mouthtemp = JJ_merged_cleaned %>% dplyr::select(starts_with("M mouth temp"))
+JJ_merged_mouthtemp = JJ_merged_cleaned %>% dplyr::select(starts_with("M mouth temp"))%>%
+  dplyr::select(-1)
 JJ_merged_cleaned = cbind(JJ_merged_cleaned,
                       Slopes_mouth =apply(X = JJ_merged_mouthtemp, MARGIN= 1,
                                     FUN = find_slope))
 formula3 = as.formula(paste("Slopes_mouth ~", paste(colnames(JJ_merged_cleaned)[2:14], 
                             collapse = " +"), sep = ""))
 lmMouth = lm(formula3, data =JJ_merged_cleaned)
-summary(lmMouth)
+print("June July MOUTH Temperatures")
+table = summary(lmMouth)
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 AIC3 = stepAIC(lmMouth, trace = F, direction = "both")
-summary(lm(Slopes_mouth ~., 
+print("June July MOUTH Temperatures -- BEST SUBSET")
+table = summary(lm(Slopes_mouth ~., 
     data = AIC3$model))
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 #### Nose temps
-JJ_merged_nosetemp = JJ_merged_cleaned %>% dplyr::select(starts_with("M nose temp"))
+JJ_merged_nosetemp = JJ_merged_cleaned %>% dplyr::select(starts_with("M nose temp"))%>%
+  dplyr::select(-1)
 JJ_merged_cleaned = cbind(JJ_merged_cleaned,
                       Slopes_nose =apply(X = JJ_merged_nosetemp, MARGIN= 1,
                                     FUN = find_slope))
 formula4 = as.formula(paste("Slopes_nose ~", paste(colnames(JJ_merged_cleaned)[2:14], 
                             collapse = " +"), sep = ""))
 lmNose = lm(formula4, data =JJ_merged_cleaned)
-summary(lmNose)
+print("June July NOSE Temperatures")
+table = summary(lmNose)
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 AIC4 = stepAIC(lmNose, trace =F, direction = "both")
-summary(lm(Slopes_nose ~., 
+print("June July NOSE Temperatures -- BEST SUBSET")
+table = summary(lm(Slopes_nose ~., 
     data = AIC4$model))
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 ```
 
-```{r May data}
+```{r May data, echo=F, message=F,warning=F}
 library(DMwR)
 # May_ear = read_xlsx("May trials/May dog exercise trial data (ear temps).xlsx")
 # May_ear = May_ear[-c(52:53),]
@@ -179,52 +211,81 @@ colnames(May_merged_cleaned) = gsub("\\)", "",colnames(May_merged_cleaned))
 colnames(May_merged_cleaned) = gsub(",", "",colnames(May_merged_cleaned))
 
 May_merged_cleaned = imputeapply(May_merged_cleaned)
-May_merged_eartemp = May_merged_cleaned %>% dplyr::select(starts_with("Tear"))
+May_merged_cleaned$Breed_standardized = as.factor(May_merged_cleaned$Breed_standardized)
+May_merged_cleaned <- within(May_merged_cleaned, 
+                            Breed_standardized <- relevel(Breed_standardized, ref = "Mix"))
+May_merged_eartemp = May_merged_cleaned %>% dplyr::select(starts_with("Tear"))%>%
+  dplyr::select(-1)
 May_merged_cleaned = cbind(May_merged_cleaned,
                       Slopes_ear =apply(X = May_merged_eartemp, MARGIN= 1,
                                     FUN = find_slope))
 formula1 = as.formula(paste("Slopes_ear ~", paste(colnames(May_merged_cleaned)[2:14], 
                             collapse = " +"), sep = ""))
 lm1 = lm(formula1, data = May_merged_cleaned)
-summary(lm1)
+print("May EAR Temperatures")
+#summary(lm1)
 AIC1 = stepAIC(lm1, trace = F, direction = "both")
-summary(lm(Slopes_ear ~., data = AIC1$model))
+print("May EAR Temperatures -- BEST SUBSET")
+table = summary(lm(Slopes_ear ~., data = AIC1$model))
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 ##
-May_merged_nosetemp = May_merged_cleaned %>% dplyr::select(starts_with("M.nose"))
+May_merged_nosetemp = May_merged_cleaned %>% dplyr::select(starts_with("M.nose"))%>%
+  dplyr::select(-1)
 May_merged_cleaned = cbind(May_merged_cleaned,
                       Slopes_nose =apply(X = May_merged_nosetemp, MARGIN= 1,
                                     FUN = find_slope))
 formula2 = as.formula(paste("Slopes_nose ~", paste(colnames(May_merged_cleaned)[2:14],
                             collapse = " +"), sep = ""))
 lm2 = lm(formula2, data = May_merged_cleaned)
-summary(lm2)
+print("May NOSE Temperatures")
+table = summary(lm2)
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 AIC2 = stepAIC(lm2, trace = F, direction = "both")
-summary(lm(Slopes_nose ~., data = AIC2$model))
+print("May NOSE Temperatures -- BEST SUBSET")
+table = summary(lm(Slopes_nose ~., data = AIC2$model))
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 ##
-May_merged_eyetemp = May_merged_cleaned %>% dplyr::select(starts_with("M.eye"))
+May_merged_eyetemp = May_merged_cleaned %>% dplyr::select(starts_with("M.eye"))%>%
+  dplyr::select(-1)
 May_merged_cleaned = cbind(May_merged_cleaned,
                       Slopes_eye =apply(X = May_merged_eyetemp, MARGIN= 1,
                                     FUN = find_slope))
 formula3 = as.formula(paste("Slopes_eye ~", paste(colnames(May_merged_cleaned)[2:14],
                             collapse = " +"), sep = ""))
 lm3 = lm(formula3, data = May_merged_cleaned)
-summary(lm3)
+print("May EYE Temperatures")
+table = summary(lm3)
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 AIC3 = stepAIC(lm3, trace = F, direction = "both")
-summary(lm(Slopes_eye ~., data = AIC3$model))
+print("May EYE Temperatures -- BEST SUBSET")
+table = summary(lm(Slopes_eye ~., data = AIC3$model))
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 ##
-May_merged_mouthtemp = May_merged_cleaned %>% dplyr::select(starts_with("Mac.Mouth"))
+May_merged_mouthtemp = May_merged_cleaned %>% dplyr::select(starts_with("Mac.Mouth"))%>%
+  dplyr::select(-1)
 May_merged_cleaned = cbind(May_merged_cleaned,
                       Slopes_mouth =apply(X = May_merged_mouthtemp, MARGIN= 1,
                                     FUN = find_slope))
 formula4 = as.formula(paste("Slopes_mouth ~", paste(colnames(May_merged_cleaned)[2:14],collapse = " +"), sep = ""))
 lm4 = lm(formula4, data = May_merged_cleaned)
-summary(lm4)
+print("May MOUTH Temperatures")
+table = summary(lm4)
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 AIC4 = stepAIC(lm4, trace = F, direction = "both")
-summary(lm(Slopes_mouth ~., data = AIC4$model))
+print("May MOUTH Temperatures -- BEST SUBSET")
+table = summary(lm(Slopes_mouth ~., data = AIC4$model))
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
 ```
 
 
-```{r ND data}
+```{r ND data, echo =F}
 #ND_ear = read_xlsx("November-December trials/November-December dog thermal relations trials (ear temps).xlsx")
 #ND_ear = ND_ear[-c(59:151),]
 #ND_regular = read_xlsx("November-December trials/November Trials Regular Imaging.xlsx")
@@ -247,7 +308,12 @@ colnames(ND_merged_cleaned)[10:11] = gsub("_in", "",colnames(ND_merged_cleaned)[
 ND_merged_cleaned[15:18] = f.to.c(ND_merged_cleaned[15:18])
 ND_merged_cleaned = imputeapply(ND_merged_cleaned)
 
-ND_merged_eartemp = ND_merged_cleaned %>% dplyr::select(starts_with("Tear"))
+ND_merged_cleaned$Standardized_breed = as.factor(ND_merged_cleaned$Standardized_breed)
+ND_merged_cleaned <- within(ND_merged_cleaned, 
+                            Standardized_breed <- relevel(Standardized_breed, ref = "Mix"))
+
+ND_merged_eartemp = ND_merged_cleaned %>% dplyr::select(starts_with("Tear"))%>%
+  dplyr::select(-1)
 ND_merged_cleaned = cbind(ND_merged_cleaned,
                       Slopes_ear =apply(X = ND_merged_eartemp, MARGIN= 1,
                                     FUN = find_slope))
@@ -255,8 +321,206 @@ ND_merged_cleaned = cbind(ND_merged_cleaned,
 formula1 = as.formula(paste("Slopes_ear ~", paste(colnames(ND_merged_cleaned)[2:14], 
                             collapse = " +"), sep = ""))
 lm1 = lm(formula1, data = ND_merged_cleaned)
-summary(lm1)
+print("WINTER EAR Temperatures")
+table = summary(lm1)
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
+AIC1 = stepAIC(lm1, trace = F, direction = "both")
+print("WINTER EAR Temperatures -- BEST SUBSET")
+table = summary(lm(Slopes_ear ~., data = AIC1$model))
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
+##
+ND_merged_nosetemp = ND_merged_cleaned %>% dplyr::select(starts_with("M.Nose"))%>%
+  dplyr::select(-1)
+ND_merged_cleaned = cbind(ND_merged_cleaned,
+                      Slopes_nose =apply(X = ND_merged_nosetemp, MARGIN= 1,
+                                    FUN = find_slope))
+
+formula2 = as.formula(paste("Slopes_nose ~", paste(colnames(ND_merged_cleaned)[2:14], 
+                            collapse = " +"), sep = ""))
+lm2 = lm(formula2, data = ND_merged_cleaned)
+print("WINTER NOSE Temperatures")
+table = summary(lm2)
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
+AIC2 = stepAIC(lm2, trace = F, direction = "both")
+print("WINTER NOSE Temperatures -- BEST SUBSET")
+table = summary(lm(Slopes_nose~., data = AIC2$model))
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
+##
+ND_merged_eyetemp = ND_merged_cleaned %>% dplyr::select(starts_with("M.Eye"))%>%
+  dplyr::select(-1)
+ND_merged_cleaned = cbind(ND_merged_cleaned,
+                      Slopes_eye =apply(X = ND_merged_eyetemp, MARGIN= 1,
+                                    FUN = find_slope))
+
+formula3 = as.formula(paste("Slopes_eye ~", paste(colnames(ND_merged_cleaned)[2:14], 
+                            collapse = " +"), sep = ""))
+lm3 = lm(formula3, data = ND_merged_cleaned)
+print("WINTER EYE Temperatures")
+table = summary(lm3)
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
+AIC3 = stepAIC(lm3, trace = F, direction = "both")
+print("WINTER EYE Temperatures -- BEST SUBSET")
+table = summary(lm(Slopes_eye~., data = AIC3$model))
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
+##
+ND_merged_mouthtemp = ND_merged_cleaned %>% dplyr::select(starts_with("Mac.Mouth"))%>%
+  dplyr::select(-1)
+ND_merged_cleaned = cbind(ND_merged_cleaned,
+                      Slopes_mouth =apply(X = ND_merged_mouthtemp, MARGIN= 1,
+                                    FUN = find_slope))
+
+formula4 = as.formula(paste("Slopes_mouth ~", paste(colnames(ND_merged_cleaned)[2:14], 
+                            collapse = " +"), sep = ""))
+lm4 = lm(formula4, data = ND_merged_cleaned)
+print("WINTER MOUTH Temperatures")
+table = summary(lm4)
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
+AIC4 = stepAIC(lm4, trace = F, direction = "both")
+print("WINTER MOUTH Temperatures -- BEST SUBSET")
+table = summary(lm(Slopes_mouth~., data = AIC4$model))
+table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+table
+```
+
+Between Seasons Analysis
+```{r, warning=F, message=F,echo=F, include=T}
+library(ez)
+library(lmerTest)
+library(lqmm)
+library(PMCMR)
+##### DO NOT RUN THIS MORE THAN ONCE
+ND_merged_cleaned$Ta.begin.F = f.to.c(ND_merged_cleaned$Ta.begin.F)
+ND_merged_cleaned$Ta.end.F = f.to.c(ND_merged_cleaned$Ta.end.F)
+ND_merged_cleaned$Humidity.begin = ND_merged_cleaned$Humidity.begin * 100
+ND_merged_cleaned$Humidity.end = ND_merged_cleaned$Humidity.end * 100
+
+JJ_merged_cleaned$JJ_ta_avg = (JJ_merged_cleaned$`Ta begin C ` + JJ_merged_cleaned$`Ta end C `)/2
+May_merged_cleaned$May_ta_avg = (May_merged_cleaned$Ta.begin.C + May_merged_cleaned$Ta.end.C)/2
+ND_merged_cleaned$ND_ta_avg = (ND_merged_cleaned$Ta.begin.F + ND_merged_cleaned$Ta.end.F)/2
+
+JJ_merged_cleaned$JJ_humid_avg = (JJ_merged_cleaned$`Humidity begin` + JJ_merged_cleaned$`Humidity end`)/2
+May_merged_cleaned$May_humid_avg = (May_merged_cleaned$Humidity.begin. + May_merged_cleaned$Humidity.end..)/2
+ND_merged_cleaned$ND_humid_avg = (ND_merged_cleaned$Humidity.begin + ND_merged_cleaned$Humidity.end)/2
+
+#####
+colnames(JJ_merged_cleaned)[1] = "Dog"
+interseason = JJ_merged_cleaned %>% dplyr::select(c(1,35:40))
+colnames(interseason)[2:5] = paste0("JJ_",colnames(interseason)[2:5])
+colnames(May_merged_cleaned)[1] = "Dog"
+interseason = merge(interseason, May_merged_cleaned %>% dplyr::select(c(1, 35:40)), by = "Dog")
+colnames(interseason)[8:11] = paste0("May_",colnames(interseason)[8:11])
+colnames(ND_merged_cleaned)[1] = "Dog"
+interseason = merge(interseason, ND_merged_cleaned %>% dplyr::select(c(1, 35:40)), by = "Dog")
+colnames(interseason)[14:17] = paste0("ND_",colnames(interseason)[14:17])
+
+#interseason = interseason[-c(which(interseason$Dog == "Murphy")),]
+print("RM-ANOVA Ear")
+anova.dat_ear = interseason %>% dplyr::select(c("Dog", ends_with("_ear")))
+
+anova.dat_ear = anova.dat_ear %>% pivot_longer(cols = -c("Dog"),
+                                               names_to = "Season",
+                                              values_to = "Slopes") 
+ezANOVA(data = anova.dat_ear, dv = (Slopes), wid = Dog , within = Season)
+
+print("RM-ANOVA Eye")
+anova.dat_eye = interseason %>% dplyr::select(c("Dog", ends_with("_eye")))
+
+anova.dat_eye = anova.dat_eye %>% pivot_longer(cols = -c("Dog"),
+                                               names_to = "Season",
+                                              values_to = "Slopes") 
+ezANOVA(data = anova.dat_eye, dv = (Slopes), wid = Dog , within = Season)
+
+anova.dat_nose = interseason %>% dplyr::select(c("Dog", ends_with("_nose")))
+anova.dat_nose = anova.dat_nose %>% pivot_longer(cols = -c("Dog"),
+                                               names_to = "Season",
+                                              values_to = "Slopes") 
+print("RM-ANOVA Nose")
+ezANOVA(data = anova.dat_nose, dv = (Slopes), wid = Dog , within = Season)
+
+
+anova.dat_mouth = interseason %>% dplyr::select(c("Dog", ends_with("_mouth")))
+anova.dat_mouth = anova.dat_mouth %>% pivot_longer(cols = -c("Dog"),
+                                               names_to = "Season",
+                                              values_to = "Slopes") 
+print("RM-ANOVA Mouth")
+ezANOVA(data = anova.dat_mouth, dv = (Slopes), wid = Dog , within = Season)
+
+#####
+# MIXED EFFECT MODELS
+
+mixed.dat_ear = interseason %>% dplyr::select(c("Dog", ends_with("_ear"), ends_with("_avg")))
+mixed.dat_ear_2 = data.frame(Slopes = rep(NA,132))
+mixed.dat_ear_2$Slopes = c(mixed.dat_ear$JJ_Slopes_ear, mixed.dat_ear$May_Slopes_ear, mixed.dat_ear$ND_Slopes_ear)
+
+mixed.dat_ear_2$Ta = c(mixed.dat_ear$JJ_ta_avg, mixed.dat_ear$May_ta_avg, mixed.dat_ear$ND_ta_avg)
+mixed.dat_ear_2$Humid = c(mixed.dat_ear$JJ_humid_avg, mixed.dat_ear$May_humid_avg, mixed.dat_ear$ND_humid_avg)
+mixed.dat_ear_2$Season = c(rep("JJ", 44), rep("May", 44), rep("ND",44))
+mixed.dat_ear_2$Dog = c(rep(interseason$Dog,3))
+
+print("Mixed Effects Model -- Ear")
+summary(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_ear_2))
+#hist(resid(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_ear_2)))
+#summary(lqmm(Slopes ~ Ta * Humid, random = ~1,group = Dog,data = mixed.dat_ear_2))
+
+##
+mixed.dat_eye = interseason %>% dplyr::select(c("Dog", ends_with("_eye"), ends_with("_avg")))
+mixed.dat_eye_2 = data.frame(Slopes = rep(NA,132))
+mixed.dat_eye_2$Slopes = c(mixed.dat_eye$JJ_Slopes_eye, mixed.dat_eye$May_Slopes_eye, mixed.dat_eye$ND_Slopes_eye)
+
+mixed.dat_eye_2$Ta = c(mixed.dat_eye$JJ_ta_avg, mixed.dat_eye$May_ta_avg, mixed.dat_eye$ND_ta_avg)
+mixed.dat_eye_2$Humid = c(mixed.dat_eye$JJ_humid_avg, mixed.dat_eye$May_humid_avg, mixed.dat_eye$ND_humid_avg)
+mixed.dat_eye_2$Season = c(rep("JJ", 44), rep("May", 44), rep("ND",44))
+mixed.dat_eye_2$Dog = c(rep(interseason$Dog,3))
+
+print("Mixed Effects Model -- Eye")
+summary(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_eye_2))
+#hist(resid(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_eye_2)))
+#summary(lqmm(Slopes ~ Ta * Humid, random = ~1,group = Dog,data = mixed.dat_eye_2))
+
+##
+
+mixed.dat_nose = interseason %>% dplyr::select(c("Dog", ends_with("_nose"), ends_with("_avg")))
+mixed.dat_nose_2 = data.frame(Slopes = rep(NA,132))
+mixed.dat_nose_2$Slopes = c(mixed.dat_nose$JJ_Slopes_nose, mixed.dat_nose$May_Slopes_nose, mixed.dat_nose$ND_Slopes_nose)
+
+mixed.dat_nose_2$Ta = c(mixed.dat_nose$JJ_ta_avg, mixed.dat_nose$May_ta_avg, mixed.dat_nose$ND_ta_avg)
+mixed.dat_nose_2$Humid = c(mixed.dat_nose$JJ_humid_avg, mixed.dat_nose$May_humid_avg, mixed.dat_nose$ND_humid_avg)
+mixed.dat_nose_2$Season = c(rep("JJ", 44), rep("May", 44), rep("ND",44))
+mixed.dat_nose_2$Dog = c(rep(interseason$Dog,3))
+
+print("Mixed Effects Model -- Nose")
+summary(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_nose_2))
+#which(resid(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_nose_2)) > 10)
+# cooksd <- cooks.distance(lmerTest::lmer(Slopes ~ Ta + Humid + (1| Dog), data = mixed.dat_nose_2))
+# plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+# abline(h = 4/44, col="red")  # add cutoff line
+# text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>4/44, names(cooksd),""), col="red")
+#summary(lqmm(Slopes ~ Ta * Humid, random = ~1,group = Dog,data = mixed.dat_nose_2))
+
+##
+mixed.dat_mouth = interseason %>% dplyr::select(c("Dog", ends_with("_mouth"), ends_with("_avg")))
+mixed.dat_mouth_2 = data.frame(Slopes = rep(NA,132))
+mixed.dat_mouth_2$Slopes = c(mixed.dat_mouth$JJ_Slopes_mouth, mixed.dat_mouth$May_Slopes_mouth, mixed.dat_mouth$ND_Slopes_mouth)
+
+mixed.dat_mouth_2$Ta = c(mixed.dat_mouth$JJ_ta_avg, mixed.dat_mouth$May_ta_avg, mixed.dat_mouth$ND_ta_avg)
+mixed.dat_mouth_2$Humid = c(mixed.dat_mouth$JJ_humid_avg, mixed.dat_mouth$May_humid_avg, mixed.dat_mouth$ND_humid_avg)
+mixed.dat_mouth_2$Season = c(rep("JJ", 44), rep("May", 44), rep("ND",44))
+mixed.dat_mouth_2$Dog = c(rep(interseason$Dog,3))
+
+print("Mixed Effects Model -- Mouth")
+summary(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_mouth_2))
+#which(resid(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_nose_2)) >10)
+#summary(lqmm(Slopes ~ Ta * Humid, random = ~1,group = Dog,data = mixed.dat_mouth_2))
+```
+
+```{r, message=F, echo=F, warning=F}
 
 
 ```
-
