@@ -19,6 +19,12 @@ find_slope = function(row_data){
 }
 ```
 
+```{r se, echo =F}
+se = function(data){
+  return(sd(data)/sqrt(length(data)))
+}
+```
+
 ```{r impute, echo =F}
 mode.for.impute = function(data.column){
   unique_elements <- na.omit(unique(data.column)) 
@@ -304,6 +310,7 @@ colnames(ND_merged_cleaned) = gsub("\\)", "",colnames(ND_merged_cleaned))
 colnames(ND_merged_cleaned) = gsub(",", "",colnames(ND_merged_cleaned))
 ND_merged_cleaned$ear_length_in = in_to_cm(ND_merged_cleaned$ear_length_in)
 ND_merged_cleaned$Front_leg_height_to_shoulder_in = in_to_cm(ND_merged_cleaned$Front_leg_height_to_shoulder_in)
+ND_merged_cleaned$weight_lbs = ND_merged_cleaned$weight_lbs / 2.205
 colnames(ND_merged_cleaned)[10:11] = gsub("_in", "",colnames(ND_merged_cleaned)[10:11])
 ND_merged_cleaned[15:18] = f.to.c(ND_merged_cleaned[15:18])
 ND_merged_cleaned = imputeapply(ND_merged_cleaned)
@@ -347,7 +354,7 @@ table
 AIC2 = stepAIC(lm2, trace = F, direction = "both")
 print("WINTER NOSE Temperatures -- BEST SUBSET")
 table = summary(lm(Slopes_nose~., data = AIC2$model))
-table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
+#table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 ##
 ND_merged_eyetemp = ND_merged_cleaned %>% dplyr::select(starts_with("M.Eye"))%>%
@@ -390,8 +397,8 @@ table
 ```
 
 Between Seasons Analysis
-```{r, warning=F, message=F,echo=F, include=T}
-library(ez)
+```{r Interseason, warning=F, message=F,echo=F, include=T}
+
 library(lmerTest)
 library(lqmm)
 library(PMCMR)
@@ -465,7 +472,9 @@ mixed.dat_ear_2$Season = c(rep("JJ", 44), rep("May", 44), rep("ND",44))
 mixed.dat_ear_2$Dog = c(rep(interseason$Dog,3))
 
 print("Mixed Effects Model -- Ear")
-summary(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_ear_2))
+table = summary(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_ear_2))
+#table$coefficients[,5] = p.adjust(table$coefficients[,5], method= "BH")
+table
 #hist(resid(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_ear_2)))
 #summary(lqmm(Slopes ~ Ta * Humid, random = ~1,group = Dog,data = mixed.dat_ear_2))
 
@@ -480,7 +489,9 @@ mixed.dat_eye_2$Season = c(rep("JJ", 44), rep("May", 44), rep("ND",44))
 mixed.dat_eye_2$Dog = c(rep(interseason$Dog,3))
 
 print("Mixed Effects Model -- Eye")
-summary(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_eye_2))
+table = summary(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_eye_2))
+#table$coefficients[,5] = p.adjust(table$coefficients[,5], method= "BH")
+table
 #hist(resid(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_eye_2)))
 #summary(lqmm(Slopes ~ Ta * Humid, random = ~1,group = Dog,data = mixed.dat_eye_2))
 
@@ -496,7 +507,9 @@ mixed.dat_nose_2$Season = c(rep("JJ", 44), rep("May", 44), rep("ND",44))
 mixed.dat_nose_2$Dog = c(rep(interseason$Dog,3))
 
 print("Mixed Effects Model -- Nose")
-summary(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_nose_2))
+table = summary(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_nose_2))
+#table$coefficients[,5] = p.adjust(table$coefficients[,5], method= "BH")
+table
 #which(resid(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_nose_2)) > 10)
 # cooksd <- cooks.distance(lmerTest::lmer(Slopes ~ Ta + Humid + (1| Dog), data = mixed.dat_nose_2))
 # plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
@@ -515,12 +528,841 @@ mixed.dat_mouth_2$Season = c(rep("JJ", 44), rep("May", 44), rep("ND",44))
 mixed.dat_mouth_2$Dog = c(rep(interseason$Dog,3))
 
 print("Mixed Effects Model -- Mouth")
-summary(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_mouth_2))
+table = summary(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_mouth_2))
+#table$coefficients[,5] = p.adjust(table$coefficients[,5], method= "BH")
+table
 #which(resid(lmerTest::lmer(Slopes ~ Ta * Humid + (1| Dog), data = mixed.dat_nose_2)) >10)
 #summary(lqmm(Slopes ~ Ta * Humid, random = ~1,group = Dog,data = mixed.dat_mouth_2))
 ```
 
-```{r, message=F, echo=F, warning=F}
+```{r Networks, warning=F, message=F, echo=F}
+library(minet)
+library(Rgraphviz)
+library(igraph)
+library(dplyr)
+library(psych)
+## May
+May_cont = May_merged_cleaned %>% dplyr::select(c(1:14, "Slopes_ear", "Slopes_mouth","Slopes_eye","Slopes_nose")) %>% dplyr::filter(Dog %in% mixed.dat_ear_2$Dog)
+May_cont$Gender = if_else(May_cont$Gender == "M", 1,0)
+May_cont = May_cont %>% dplyr::select(-c("Dog"))
+new_mim = matrix(rep(0, 17*17), nrow = 17)
+colnames(new_mim) =c("Breed", "Body Mass", "Coat Color", "Coat Type",
+                      "Ear Morphology", "Sex", "Age","Coat Length",
+                      "Nose Length", "Ear Length","Leg Length",
+                      "Snout Length", "Paw Width", "Ear Temperature",
+                      "Mouth Temperature", "Eye Temperature","Nose Temperature")
+rownames(new_mim) =colnames(new_mim)
+for (i in 1:100){
+  set.seed(i)
+  index = sample(1:nrow(May_cont), size=nrow(May_cont), replace = T)
+  data = May_cont[index,]
+  mim <- build.mim(data, disc = "equalfreq", estimator="mi.empirical")
+  mim[mim < 0.5] = 0
+  for (j in (1:ncol(mim)) ){
+    for (k in (1:ncol(mim)) ){
+      if (mim[j,k] > 0) {
+        new_mim[j,k] = new_mim[j,k]+1
+      }
+    }
+  }
+}
+new_mim[new_mim<95] = 0
+May_mim = new_mim
+new_mim = new_mim[colSums(new_mim) !=0,colSums(new_mim) !=0]
+nodeLabels =colnames(new_mim)
+names(nodeLabels)<-colnames(new_mim)
+nAttrs = list()
+nAttrs$label<-nodeLabels
+attrs <- list(node = list(shape = "ellipse", fixedsize = F))
+attrs$node$fontsize<-15
+attrs$node$size<-20
+tiff("network_May.tiff", width =5, height =5,
+         units = "in", res =300)
+plot( as( new_mim ,"graphNEL"),nodeAttrs = nAttrs, attrs = attrs,cex.sub = 1.5)
+dev.off()
+
+graph = igraph::graph_from_adjacency_matrix(new_mim, mode = "undirected", diag =F,weighted = T)
+May_metric_1 = betweenness(graph)
+May_metric_2 = degree(graph)
+May_metric_3 = closeness(graph, mode ="all")
+May_metric_4 = transitivity(graph, type = "global")
+May_metric_5 = vertex_connectivity(graph)
+# plot(graph, layout = layout.graphopt(graph),
+#          normalize = F,
+#          edge.arrow.mode = 0,
+#          vertex.label.cex = 1.6, vertex.label.font = 2, vertex.label.color= "black"
+#          , cex = 3)
+
+## JJ
+JJ_cont = JJ_merged_cleaned %>% dplyr::select(c(1:14, "Slopes_ear", "Slopes_mouth","Slopes_eye","Slopes_nose")) %>% dplyr::filter(Dog %in% mixed.dat_ear_2$Dog)
+JJ_cont$Gender = if_else(JJ_cont$Gender == "M", 1,0)
+JJ_cont = JJ_cont %>% dplyr::select(-c("Dog"))
+new_mim = matrix(rep(0, 17*17), nrow = 17)
+colnames(new_mim) =c("Breed", "Body Mass", "Coat Color", "Coat Type",
+                      "Ear Morphology", "Sex", "Age","Coat Length",
+                      "Nose Length", "Ear Length","Leg Length",
+                      "Snout Length", "Paw Width", "Ear Temperature",
+                      "Mouth Temperature", "Eye Temperature","Nose Temperature")
+rownames(new_mim) =colnames(new_mim)
+for (i in 1:100){
+  set.seed(i)
+  index = sample(1:nrow(JJ_cont), size=nrow(JJ_cont), replace = T)
+  data = JJ_cont[index,]
+  mim <- build.mim(data, disc = "equalfreq", estimator="mi.empirical")
+  mim[mim < 0.5] = 0
+  for (j in (1:ncol(mim)) ){
+    for (k in (1:ncol(mim)) ){
+      if (mim[j,k] > 0) {
+        new_mim[j,k] = new_mim[j,k]+1
+      }
+    }
+  }
+}
+new_mim[new_mim<95] = 0
+JJ_mim = new_mim
+new_mim = new_mim[colSums(new_mim) !=0,colSums(new_mim) !=0]
+nodeLabels =colnames(new_mim)
+names(nodeLabels)<-colnames(new_mim)
+nAttrs = list()
+nAttrs$label<-nodeLabels
+attrs <- list(node = list(shape = "ellipse", fixedsize = F))
+attrs$node$fontsize<-15
+attrs$node$size<-20
+tiff("network_JJ.tiff", width =5, height =5,
+         units = "in", res =300)
+plot( as( new_mim ,"graphNEL"),nodeAttrs = nAttrs, attrs = attrs,cex.sub = 1.5)
+dev.off()
+graph = igraph::graph_from_adjacency_matrix(new_mim, mode = "undirected", diag =F,weighted = T)
+JJ_metric_1 = betweenness(graph)
+JJ_metric_2 = degree(graph)
+JJ_metric_3 = closeness(graph, mode ="all")
+JJ_metric_4 = transitivity(graph, type = "global")
+JJ_metric_5 = vertex_connectivity(graph)
+
+## ND
+colnames(ND_merged_cleaned)[1] = "Dog"
+ND_cont = ND_merged_cleaned %>% dplyr::select(c(1:14, "Slopes_ear", "Slopes_mouth","Slopes_eye","Slopes_nose")) %>% dplyr::filter(Dog %in% mixed.dat_ear_2$Dog)
+ND_cont$Gender = if_else(ND_cont$Gender == "M", 1,0)
+ND_cont = ND_cont %>% dplyr::select(-c("Dog"))
+new_mim = matrix(rep(0, 17*17), nrow = 17)
+colnames(new_mim) =c("Breed", "Body Mass", "Coat Color", "Coat Type",
+                      "Ear Morphology", "Sex", "Age","Coat Length",
+                      "Nose Length", "Ear Length","Leg Length",
+                      "Snout Length", "Paw Width", "Ear Temperature",
+                      "Mouth Temperature", "Eye Temperature","Nose Temperature")
+rownames(new_mim) =colnames(new_mim)
+for (i in 1:100){
+  set.seed(i)
+  index = sample(1:nrow(ND_cont), size=nrow(ND_cont), replace = T)
+  data = ND_cont[index,]
+  mim <- build.mim(data, disc = "equalfreq", estimator="mi.empirical")
+  mim[mim < 0.5] = 0
+  for (j in (1:ncol(mim)) ){
+    for (k in (1:ncol(mim)) ){
+      if (mim[j,k] > 0) {
+        new_mim[j,k] = new_mim[j,k]+1
+      }
+    }
+  }
+}
+new_mim[new_mim<95] = 0
+ND_mim = new_mim
+new_mim = new_mim[colSums(new_mim) !=0,colSums(new_mim) !=0]
+nodeLabels =colnames(new_mim)
+names(nodeLabels)<-colnames(new_mim)
+nAttrs = list()
+nAttrs$label<-nodeLabels
+attrs <- list(node = list(shape = "ellipse", fixedsize = F))
+attrs$node$fontsize<-15
+attrs$node$size<-20
+tiff("network_ND.tiff", width =5, height =5,
+         units = "in", res =300)
+plot( as( new_mim ,"graphNEL"),nodeAttrs = nAttrs, attrs = attrs,cex.sub = 1.5)
+dev.off()
+
+graph = igraph::graph_from_adjacency_matrix(new_mim, mode = "undirected", diag =F,weighted = T)
+ND_metric_1 = betweenness(graph)
+ND_metric_2 = degree(graph)
+ND_metric_3 = closeness(graph, mode ="all")
+ND_metric_4 = transitivity(graph, type = "global")
+ND_metric_5 = vertex_connectivity(graph)
+
+union_mim = May_mim + JJ_mim + ND_mim
+union_mim[union_mim>0] = 0
+for (i in 1:nrow(union_mim)){
+  for (j in 1:nrow(union_mim)){
+    if (May_mim[i,j] >0){
+      union_mim[i,j] = "Sp"
+    }
+    if (JJ_mim[i,j] >0){
+      union_mim[i,j] = paste(union_mim[i,j], ",Su", sep = "")
+    }
+    if (ND_mim[i,j] >0){
+      union_mim[i,j] =paste(union_mim[i,j], ",Wi", sep = "")
+    }
+  }
+}
+write.csv(union_mim, file = "adj.mat.csv")
+
+```
+
+Mediation Analysis.
+```{r Mediation, message=F, echo=F, warning=F, results = 'hide', eval =F}
+library(mediation)
+sink("Mediation.txt", type = "output")
+set.seed(123)
+
+summary(mediate(lm(Nose_length ~ weight_in_kg+Snout_length+Right_leg_length, data = May_merged_cleaned), lm(Slopes_mouth ~ Nose_length + weight_in_kg+Snout_length+Right_leg_length, data = May_merged_cleaned), sims = 1000, boot = T, treat = "weight_in_kg", mediator = "Nose_length"))
+
+summary(mediate(lm(Snout_length ~ weight_in_kg + Right_leg_length+Nose_length, data = May_merged_cleaned), lm(Slopes_mouth ~ Nose_length + weight_in_kg+Snout_length+Right_leg_length, data = May_merged_cleaned), sims = 1000, boot = T, treat = "weight_in_kg", mediator = "Snout_length"))
+
+summary(mediate(lm(Right_leg_length ~ weight_in_kg +Snout_length+Nose_length, data = May_merged_cleaned), lm(Slopes_mouth ~ Nose_length + weight_in_kg+Snout_length+Right_leg_length, data = May_merged_cleaned), sims = 1000, boot = T, treat = "weight_in_kg", mediator = "Right_leg_length"))
 
 
+summary(mediate(lm(ear_length ~ weight_in_kg, data = May_merged_cleaned), lm(Slopes_eye ~ ear_length + weight_in_kg, data = May_merged_cleaned), sims = 1000, boot = T, treat = "weight_in_kg", mediator = "ear_length"))
+
+
+summary(mediate(lm(Nose_length ~ weight_in_kg, data = JJ_merged_cleaned), lm(Slopes_mouth ~ weight_in_kg +Nose_length + Paw_width_cm, data = JJ_merged_cleaned), sims = 1000, boot = T, treat = "weight_in_kg", mediator = "Nose_length"))
+
+summary(mediate(lm(Paw_width_cm ~ weight_in_kg, data = JJ_merged_cleaned), lm(Slopes_mouth ~ weight_in_kg +Paw_width_cm + Nose_length, data = JJ_merged_cleaned), sims = 1000, boot = T, treat = "weight_in_kg", mediator = "Paw_width_cm"))
+
+
+summary(mediate(lm(Nose_length ~ weight_in_kg+Coat_length_cm+Paw_width_cm, data = JJ_merged_cleaned),lm(Slopes_nose~Nose_length+weight_in_kg+Coat_length_cm+Paw_width_cm, data= JJ_merged_cleaned),
+                boot =T, sims =1000, treat = "weight_in_kg", mediator = "Nose_length"))
+
+summary(mediate(lm(Paw_width_cm ~ weight_in_kg+ Coat_length_cm+Nose_length, data = JJ_merged_cleaned),lm(Slopes_nose~Nose_length+weight_in_kg+Coat_length_cm+Paw_width_cm, data= JJ_merged_cleaned),
+                boot =T, sims =1000, treat = "weight_in_kg", mediator = "Paw_width_cm"))
+
+summary(mediate(lm(Coat_length_cm ~ weight_in_kg + Paw_width_cm + Nose_length, data = JJ_merged_cleaned),lm(Slopes_nose~Nose_length+weight_in_kg+Coat_length_cm+Paw_width_cm, data= JJ_merged_cleaned),
+                boot =T, sims =1000, treat = "weight_in_kg", mediator = "Coat_length_cm"))
+
+
+
+summary(mediate(lm(Nose_length ~ weight_in_kg, data = JJ_merged_cleaned), lm(Slopes_ear~ Nose_length + weight_in_kg, data = JJ_merged_cleaned), sims = 1000, boot = T, treat = "weight_in_kg", mediator = "Nose_length"))
+
+
+
+summary(mediate(lm(ear_length ~ weight_lbs ,data = ND_merged_cleaned), lm(Slopes_nose ~ ear_length + weight_lbs, data = ND_merged_cleaned), sims = 1000, boot = T, mediator = "ear_length", treat = "weight_lbs"))
+
+
+
+
+sink()
+p.adjust(c(0.018,0.024,0.50),method = "BH")
+p.adjust(c(0.028, 0.02), method ="BH")
+p.adjust(c(0.178,0.062,0.046), method = "BH")
+
+
+```
+
+```{r Plotting Grouped, message=F, warning=F, echo=F}
+summary_tab_ear = data.frame(TimePoint = rep(c("Control", "After Hike", "15 min", "30 min"),3))
+
+
+summary_tab_ear$Average = rep(NA,12)
+summary_tab_ear$SE = rep(NA,12)
+summary_tab_ear$Season = c(rep("Spring",4), rep("Summer",4), rep("Winter",4))
+
+summary_tab_ear = summary_tab_ear  %>% mutate(TimePoint = factor(TimePoint, level = c("Control", "After Hike", "15 min", "30 min")))
+summary_tab_ear[1:4,2]= c(mean(May_merged_cleaned[,15]),
+                                 mean(May_merged_cleaned[,16]),
+                                 mean(May_merged_cleaned[,17]),
+                                 mean(May_merged_cleaned[,18]))
+summary_tab_ear[5:8,2]= c(mean(JJ_merged_cleaned[,15]),
+                                 mean(JJ_merged_cleaned[,16]),
+                                 mean(JJ_merged_cleaned[,17]),
+                                 mean(JJ_merged_cleaned[,18]))
+summary_tab_ear[9:12,2]= c(mean(ND_merged_cleaned[,15]),
+                                 mean(ND_merged_cleaned[,16]),
+                                 mean(ND_merged_cleaned[,17]),
+                                 mean(ND_merged_cleaned[,18]))
+summary_tab_ear[1:4,3]= c(se(May_merged_cleaned[,15]),
+                                 se(May_merged_cleaned[,16]),
+                                 se(May_merged_cleaned[,17]),
+                                 se(May_merged_cleaned[,18]))
+summary_tab_ear[5:8,3]= c(se(JJ_merged_cleaned[,15]),
+                                 se(JJ_merged_cleaned[,16]),
+                                 se(JJ_merged_cleaned[,17]),
+                                 se(JJ_merged_cleaned[,18]))
+summary_tab_ear[9:12,3]= c(se(ND_merged_cleaned[,15]),
+                                 se(ND_merged_cleaned[,16]),
+                                 se(ND_merged_cleaned[,17]),
+                                 se(ND_merged_cleaned[,18]))
+
+
+tiff("Plot_ear.tiff",
+     width =8.7, height =7.0,
+         units = "in", res =300)
+ggplot(summary_tab_ear, aes(x = TimePoint, y = Average, colour = Season)) + 
+  geom_errorbar(aes(ymin = Average-SE, ymax = Average+SE), width = 0.2,size =1) +
+  geom_line(aes(group = Season))+
+  geom_point(size = 4) + theme_bw()+ylab(expression("T"['ear']*~(degree*C)))+xlab("Time")+
+  scale_color_manual(values = c("green","red", "blue"))+
+  ylim(36,40)+
+  theme(
+      axis.text=element_text(size=28), axis.title = element_text(size = 32),
+      legend.title = element_blank(), legend.text = element_text(size =24),
+      legend.position = c(.864, .902),
+      legend.key.width= unit(1.1, 'cm'),
+      panel.border = element_rect(colour = "black", fill=NA),
+      legend.background = element_blank(),
+      legend.box.background = element_rect(colour = "black"))
+dev.off()
+
+
+
+#####
+
+summary_tab_mouth = data.frame(TimePoint = rep(c("Control", "After Hike", "15 min", "30 min"),3))
+
+
+summary_tab_mouth$Average = rep(NA,12)
+summary_tab_mouth$SE = rep(NA,12)
+summary_tab_mouth$Season = c(rep("Spring",4), rep("Summer",4), rep("Winter",4))
+
+summary_tab_mouth = summary_tab_mouth  %>% mutate(TimePoint = factor(TimePoint, level = c("Control", "After Hike", "15 min", "30 min")))
+summary_tab_mouth[1:4,2]= c(mean(May_merged_cleaned[,21]),
+                                 mean(May_merged_cleaned[,24]),
+                                 mean(May_merged_cleaned[,27]),
+                                 mean(May_merged_cleaned[,30]))
+summary_tab_mouth[5:8,2]= c(mean(JJ_merged_cleaned[,21]),
+                                 mean(JJ_merged_cleaned[,24]),
+                                 mean(JJ_merged_cleaned[,27]),
+                                 mean(JJ_merged_cleaned[,30]))
+summary_tab_mouth[9:12,2]= c(mean(ND_merged_cleaned[,21]),
+                                 mean(ND_merged_cleaned[,24]),
+                                 mean(ND_merged_cleaned[,27]),
+                                 mean(ND_merged_cleaned[,30]))
+summary_tab_mouth[1:4,3]= c(se(May_merged_cleaned[,21]),
+                                 se(May_merged_cleaned[,24]),
+                                 se(May_merged_cleaned[,27]),
+                                 se(May_merged_cleaned[,30]))
+summary_tab_mouth[5:8,3]= c(se(JJ_merged_cleaned[,21]),
+                                 se(JJ_merged_cleaned[,24]),
+                                 se(JJ_merged_cleaned[,27]),
+                                 se(JJ_merged_cleaned[,30]))
+summary_tab_mouth[9:12,3]= c(se(ND_merged_cleaned[,21]),
+                                 se(ND_merged_cleaned[,24]),
+                                 se(ND_merged_cleaned[,27]),
+                                 se(ND_merged_cleaned[,30]))
+
+
+tiff("Plot_mouth.tiff",
+     width =8.7, height =7.0,
+         units = "in", res =300)
+ggplot(summary_tab_mouth, aes(x = TimePoint, y = Average, colour = Season)) + 
+  geom_errorbar(aes(ymin = Average-SE, ymax = Average+SE), width = 0.2,size =1) +
+  geom_line(aes(group = Season))+
+  geom_point(size = 4) + theme_bw()+ylab(expression("T"['mouth']*~(degree*C)))+xlab("Time")+
+  scale_color_manual(values = c("green","red", "blue"))+
+  ylim(20,40)+
+  theme(
+      axis.text=element_text(size=28), axis.title = element_text(size = 32),
+      legend.title = element_blank(), legend.text = element_text(size =24),
+      legend.key.width= unit(1.1, 'cm'),
+      legend.position = c(.87, .902),
+      panel.border = element_rect(colour = "black", fill=NA),
+      legend.background = element_blank(),
+      legend.box.background = element_rect(colour = "black"))
+dev.off()
+
+
+#####
+
+summary_tab_nose = data.frame(TimePoint = rep(c("Control", "After Hike", "15 min", "30 min"),3))
+
+
+summary_tab_nose$Average = rep(NA,12)
+summary_tab_nose$SE = rep(NA,12)
+summary_tab_nose$Season = c(rep("Spring",4), rep("Summer",4), rep("Winter",4))
+
+summary_tab_nose = summary_tab_nose  %>% mutate(TimePoint = factor(TimePoint, level = c("Control", "After Hike", "15 min", "30 min")))
+summary_tab_nose[1:4,2]= c(mean(May_merged_cleaned[,19]),
+                                 mean(May_merged_cleaned[,22]),
+                                 mean(May_merged_cleaned[,25]),
+                                 mean(May_merged_cleaned[,28]))
+summary_tab_nose[5:8,2]= c(mean(JJ_merged_cleaned[,19]),
+                                 mean(JJ_merged_cleaned[,22]),
+                                 mean(JJ_merged_cleaned[,25]),
+                                 mean(JJ_merged_cleaned[,28]))
+summary_tab_nose[9:12,2]= c(mean(ND_merged_cleaned[,19]),
+                                 mean(ND_merged_cleaned[,22]),
+                                 mean(ND_merged_cleaned[,25]),
+                                 mean(ND_merged_cleaned[,28]))
+summary_tab_nose[1:4,3]= c(se(May_merged_cleaned[,19]),
+                                 se(May_merged_cleaned[,22]),
+                                 se(May_merged_cleaned[,25]),
+                                 se(May_merged_cleaned[,28]))
+summary_tab_nose[5:8,3]= c(se(JJ_merged_cleaned[,19]),
+                                 se(JJ_merged_cleaned[,22]),
+                                 se(JJ_merged_cleaned[,25]),
+                                 se(JJ_merged_cleaned[,28]))
+summary_tab_nose[9:12,3]= c(se(ND_merged_cleaned[,19]),
+                                 se(ND_merged_cleaned[,22]),
+                                 se(ND_merged_cleaned[,25]),
+                                 se(ND_merged_cleaned[,28]))
+
+
+tiff("Plot_nose.tiff",
+     width =8.7, height =7.0,
+         units = "in", res =300)
+ggplot(summary_tab_nose, aes(x = TimePoint, y = Average, colour = Season)) + 
+  geom_errorbar(aes(ymin = Average-SE, ymax = Average+SE), width = 0.2,size =1) +
+  geom_line(aes(group = Season))+
+  geom_point(size = 4) + theme_bw()+ylab(expression("T"['nose']*(~degree*C)))+xlab("Time")+
+  scale_color_manual(values = c("green","red", "blue"))+
+  ylim(18,40)+
+  theme(
+      axis.text=element_text(size=28), axis.title = element_text(size = 32),
+      legend.title = element_blank(), legend.text = element_text(size =24),
+      legend.position = c(.869, .902),
+      legend.key.width= unit(1.1, 'cm'),
+      panel.border = element_rect(colour = "black", fill=NA),
+      legend.background = element_blank(),
+      legend.box.background = element_rect(colour = "black"))
+dev.off()
+
+
+#####
+
+summary_tab_eye = data.frame(TimePoint = rep(c("Control", "After Hike", "15 min", "30 min"),3))
+
+
+summary_tab_eye$Average = rep(NA,12)
+summary_tab_eye$SE = rep(NA,12)
+summary_tab_eye$Season = c(rep("Spring",4), rep("Summer",4), rep("Winter",4))
+
+summary_tab_eye = summary_tab_eye %>% mutate(TimePoint = factor(TimePoint, level = c("Control", "After Hike", "15 min", "30 min")))
+
+summary_tab_eye[1:4,2]= c(mean(May_merged_cleaned[,20]),
+                                 mean(May_merged_cleaned[,23]),
+                                 mean(May_merged_cleaned[,26]),
+                                 mean(May_merged_cleaned[,29]))
+summary_tab_eye[5:8,2]= c(mean(JJ_merged_cleaned[,20]),
+                                 mean(JJ_merged_cleaned[,23]),
+                                 mean(JJ_merged_cleaned[,26]),
+                                 mean(JJ_merged_cleaned[,29]))
+summary_tab_eye[9:12,2]= c(mean(ND_merged_cleaned[,20]),
+                                 mean(ND_merged_cleaned[,23]),
+                                 mean(ND_merged_cleaned[,26]),
+                                 mean(ND_merged_cleaned[,29]))
+summary_tab_eye[1:4,3]= c(se(May_merged_cleaned[,20]),
+                                 se(May_merged_cleaned[,23]),
+                                 se(May_merged_cleaned[,26]),
+                                 se(May_merged_cleaned[,29]))
+summary_tab_eye[5:8,3]= c(se(JJ_merged_cleaned[,20]),
+                                 se(JJ_merged_cleaned[,23]),
+                                 se(JJ_merged_cleaned[,26]),
+                                 se(JJ_merged_cleaned[,29]))
+summary_tab_eye[9:12,3]= c(se(ND_merged_cleaned[,20]),
+                                 se(ND_merged_cleaned[,23]),
+                                 se(ND_merged_cleaned[,26]),
+                                 se(ND_merged_cleaned[,29]))
+
+
+tiff("Plot_eye.tiff",
+     width =8.7, height =7.0,
+         units = "in", res =300)
+ggplot(summary_tab_eye, aes(x = TimePoint, y = Average, colour = Season)) + 
+  geom_errorbar(aes(ymin = Average-SE, ymax = Average+SE), width = 0.2,size =1) +
+  geom_line(aes(group = Season))+
+  geom_point(size = 4) + theme_bw()+ylab(expression("T"['eye']*~(degree*C) ))+xlab("Time")+
+  scale_color_manual(values = c("green","red", "blue"))+
+  guides(linetype = guide_legend(override.aes = list(size = 3)))+
+  ylim(25,40)+
+  theme(
+      axis.text=element_text(size=28), axis.title = element_text(size = 32),
+      legend.title = element_blank(), legend.text = element_text(size =24),
+      legend.key.width= unit(1.1, 'cm'),
+      legend.position = c(.868, .902),
+      panel.border = element_rect(colour = "black", fill=NA),
+      legend.background = element_blank(),
+      legend.box.background = element_rect(colour = "black"))
+dev.off()
+```
+
+```{r Plotting Trends, message=F, warning=F, echo=F}
+summary_tab_ear_2 = data.frame(TimePoint = rep(c("Control", "After Hike", "15 min", "30 min"),6))
+
+
+summary_tab_ear_2$Average = rep(NA,24)
+summary_tab_ear_2$SE = rep(NA,24)
+summary_tab_ear_2$Season = c(rep("Spring",8), rep("Summer",8), rep("Winter",8))
+summary_tab_ear_2$Trend = rep(c(rep("Increasing",4), rep("Decreasing",4)),3)
+
+summary_tab_ear_2 = summary_tab_ear_2 %>% mutate(TimePoint = factor(TimePoint, level = c("Control", "After Hike", "15 min", "30 min")))
+
+summary_tab_ear_2[1:4,2]= c(mean(May_merged_cleaned[May_merged_cleaned$Slopes_ear>0,15]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_ear>0,16]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_ear>0,17]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_ear>0,18]))
+summary_tab_ear_2[5:8,2]= c(mean(May_merged_cleaned[May_merged_cleaned$Slopes_ear<=0,15]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_ear<=0,16]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_ear<=0,17]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_ear<=0,18]))
+
+summary_tab_ear_2[9:12,2]= c(mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear>0,15]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear>0,16]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear>0,17]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear>0,18]))
+summary_tab_ear_2[13:16,2]= c(mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear<=0,15]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear<=0,16]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear<=0,17]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear<=0,18]))
+summary_tab_ear_2[17:20,2]= c(mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear>0,15]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear>0,16]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear>0,17]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear>0,18]))
+summary_tab_ear_2[21:24,2]= c(mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear<=0,15]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear<=0,16]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear<=0,17]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear<=0,18]))
+
+summary_tab_ear_2[1:4,3]= c(se(May_merged_cleaned[May_merged_cleaned$Slopes_ear>0,15]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_ear>0,16]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_ear>0,17]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_ear>0,18]))
+summary_tab_ear_2[5:8,3]= c(se(May_merged_cleaned[May_merged_cleaned$Slopes_ear<=0,15]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_ear<=0,16]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_ear<=0,17]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_ear<=0,18]))
+
+summary_tab_ear_2[9:12,3]= c(se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear>0,15]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear>0,16]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear>0,17]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear>0,18]))
+summary_tab_ear_2[13:16,3]= c(se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear<=0,15]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear<=0,16]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear<=0,17]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_ear<=0,18]))
+summary_tab_ear_2[17:20,3]= c(se(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear>0,15]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear>0,16]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear>0,17]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear>0,18]))
+summary_tab_ear_2[21:24,3]= c(se(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear<=0,15]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear<=0,16]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear<=0,17]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_ear<=0,18]))
+
+tiff("Plot_ear_2.tiff",
+     width =11, height =7.0,
+         units = "in", res =300)
+ggplot(summary_tab_ear_2, aes(x = TimePoint, y = Average, colour = Season)) + 
+  facet_wrap(~Trend)+
+  geom_errorbar(aes(ymin = Average-SE, ymax = Average+SE), width = 0.2,size =1) +
+  geom_line(aes(group = Season))+
+  geom_point(size = 4) + theme_bw()+ylab(expression("T"['ear']*~(degree*C)))+xlab("Time")+
+  scale_color_manual(values = c("green","red", "blue"))+
+  theme(
+      axis.text=element_text(size=19), axis.title = element_text(size = 32),
+      legend.title = element_blank(), legend.text = element_text(size =24),
+      legend.position = c(.902, 0.105),
+      legend.key.width= unit(1.1, 'cm'),
+      panel.border = element_rect(colour = "black", fill=NA),
+      legend.background = element_blank(),
+      legend.box.background = element_rect(colour = "black"),
+      strip.text.x = element_text(size = 30))
+dev.off()
+
+
+
+#####
+
+summary_tab_mouth_2 = data.frame(TimePoint = rep(c("Control", "After Hike", "15 min", "30 min"),6))
+
+
+summary_tab_mouth_2$Average = rep(NA,24)
+summary_tab_mouth_2$SE = rep(NA,24)
+summary_tab_mouth_2$Season = c(rep("Spring",8), rep("Summer",8), rep("Winter",8))
+summary_tab_mouth_2 = summary_tab_mouth_2%>% mutate(TimePoint = factor(TimePoint, level = c("Control", "After Hike", "15 min", "30 min")))
+summary_tab_mouth_2$Trend = rep(c(rep("Increasing",4), rep("Decreasing",4)),3)
+
+summary_tab_mouth_2[1:4,2]= c(mean(May_merged_cleaned[May_merged_cleaned$Slopes_mouth>0,21]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_mouth>0,24]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_mouth>0,27]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_mouth>0,30]))
+summary_tab_mouth_2[5:8,2]= c(mean(May_merged_cleaned[May_merged_cleaned$Slopes_mouth<=0,21]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_mouth<=0,24]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_mouth<=0,27]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_mouth<=0,30]))
+
+summary_tab_mouth_2[9:12,2]= c(mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth>0,21]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth>0,24]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth>0,27]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth>0,30]))
+
+summary_tab_mouth_2[13:24,2]= c(mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth<=0,21]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth<=0,24]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth<=0,27]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth<=0,30]))
+
+summary_tab_mouth_2[17:20,2]= c(mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth>0,21]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth>0,24]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth>0,27]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth>0,30]))
+
+summary_tab_mouth_2[21:24,2]= c(mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth<=0,21]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth<=0,24]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth<=0,27]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth<=0,30]))
+
+summary_tab_mouth_2[1:4,3]= c(se(May_merged_cleaned[May_merged_cleaned$Slopes_mouth>0,21]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_mouth>0,24]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_mouth>0,27]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_mouth>0,30]))
+summary_tab_mouth_2[5:8,3]= c(se(May_merged_cleaned[May_merged_cleaned$Slopes_mouth<=0,21]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_mouth<=0,24]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_mouth<=0,27]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_mouth<=0,30]))
+
+summary_tab_mouth_2[9:12,3]= c(se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth>0,21]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth>0,24]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth>0,27]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth>0,30]))
+summary_tab_mouth_2[13:16,3]= c(se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth<=0,21]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth<=0,24]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth<=0,27]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_mouth<=0,30]))
+summary_tab_mouth_2[17:20,3]= c(se(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth>0,21]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth>0,24]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth>0,27]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth>0,30]))
+summary_tab_mouth_2[21:24,3]= c(se(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth<=0,21]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth<=0,24]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth<=0,27]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_mouth<=0,30]))
+
+
+tiff("Plot_mouth_2.tiff",
+     width =11, height =7.0,
+         units = "in", res =300)
+ggplot(summary_tab_mouth_2, aes(x = TimePoint, y = Average, colour = Season)) + 
+  facet_wrap(~Trend)+
+  geom_errorbar(aes(ymin = Average-SE, ymax = Average+SE), width = 0.2,size =1) +
+  geom_line(aes(group = Season))+
+  geom_point(size = 4) + theme_bw()+ylab(expression("T"['mouth']*~(degree*C)))+xlab("Time")+
+  scale_color_manual(values = c("green","red", "blue"))+
+  theme(
+      axis.text=element_text(size=19), axis.title = element_text(size = 32),
+      legend.title = element_blank(), legend.text = element_text(size =24),
+      legend.key.width= unit(1.1, 'cm'),
+      legend.position = c(.902, 0.105),
+      panel.border = element_rect(colour = "black", fill=NA),
+      legend.background = element_blank(),
+      legend.box.background = element_rect(colour = "black"),
+      strip.text.x = element_text(size = 30))
+dev.off()
+
+
+#####
+
+summary_tab_nose_2 = data.frame(TimePoint = rep(c("Control", "After Hike", "15 min", "30 min"),6))
+
+
+summary_tab_nose_2$Average = rep(NA,24)
+summary_tab_nose_2$SE = rep(NA,24)
+summary_tab_nose_2$Season = c(rep("Spring",8), rep("Summer",8), rep("Winter",8))
+
+summary_tab_nose_2 = summary_tab_nose_2 %>% mutate(TimePoint = factor(TimePoint, level = c("Control", "After Hike", "15 min", "30 min")))
+summary_tab_nose_2$Trend = rep(c(rep("Increasing",4), rep("Decreasing",4)),3)
+
+summary_tab_nose_2[1:4,2]= c(mean(May_merged_cleaned[May_merged_cleaned$Slopes_nose>0,19]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_nose>0,22]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_nose>0,25]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_nose>0,28]))
+summary_tab_nose_2[5:8,2]= c(mean(May_merged_cleaned[May_merged_cleaned$Slopes_nose<=0,19]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_nose<=0,22]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_nose<=0,25]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_nose<=0,28]))
+
+summary_tab_nose_2[9:12,2]= c(mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose>0,19]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose>0,22]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose>0,25]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose>0,28]))
+
+summary_tab_nose_2[13:24,2]= c(mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose<=0,19]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose<=0,22]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose<=0,25]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose<=0,28]))
+
+summary_tab_nose_2[17:20,2]= c(mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose>0,19]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose>0,22]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose>0,25]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose>0,28]))
+
+summary_tab_nose_2[21:24,2]= c(mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose<=0,19]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose<=0,22]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose<=0,25]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose<=0,28]))
+
+summary_tab_nose_2[1:4,3]= c(se(May_merged_cleaned[May_merged_cleaned$Slopes_nose>0,19]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_nose>0,22]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_nose>0,25]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_nose>0,28]))
+summary_tab_nose_2[5:8,3]= c(se(May_merged_cleaned[May_merged_cleaned$Slopes_nose<=0,19]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_nose<=0,22]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_nose<=0,25]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_nose<=0,28]))
+
+summary_tab_nose_2[9:12,3]= c(se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose>0,19]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose>0,22]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose>0,25]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose>0,28]))
+summary_tab_nose_2[13:16,3]= c(se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose<=0,19]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose<=0,22]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose<=0,25]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_nose<=0,28]))
+summary_tab_nose_2[17:20,3]= c(se(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose>0,19]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose>0,22]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose>0,25]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose>0,28]))
+summary_tab_nose_2[21:24,3]= c(se(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose<=0,19]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose<=0,22]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose<=0,25]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_nose<=0,28]))
+
+
+tiff("Plot_nose_2.tiff",
+     width =11, height =7.0,
+         units = "in", res =300)
+ggplot(summary_tab_nose_2, aes(x = TimePoint, y = Average, colour = Season)) + 
+  facet_wrap(~Trend)+
+  geom_errorbar(aes(ymin = Average-SE, ymax = Average+SE), width = 0.2,size =1) +
+  geom_line(aes(group = Season))+
+  geom_point(size = 4) + theme_bw()+ylab(expression("T"['nose']*(~degree*C)))+xlab("Time")+
+  scale_color_manual(values = c("green","red", "blue"))+
+  ylim(15,35)+
+  theme(
+      axis.text=element_text(size=19), axis.title = element_text(size = 32),
+      legend.title = element_blank(), legend.text = element_text(size =24),
+      legend.position = c(.902, 0.105),
+      legend.key.width= unit(1.1, 'cm'),
+      panel.border = element_rect(colour = "black", fill=NA),
+      legend.background = element_blank(),
+      legend.box.background = element_rect(colour = "black"),
+      strip.text.x = element_text(size = 30))
+dev.off()
+
+
+#####
+
+summary_tab_eye_2 = data.frame(TimePoint = rep(c("Control", "After Hike", "15 min", "30 min"),6))
+
+
+summary_tab_eye_2$Average = rep(NA,24)
+summary_tab_eye_2$SE = rep(NA,24)
+summary_tab_eye_2$Season = c(rep("Spring",8), rep("Summer",8), rep("Winter",8))
+
+summary_tab_eye_2 = summary_tab_eye_2 %>% mutate(TimePoint = factor(TimePoint, level = c("Control", "After Hike", "15 min", "30 min")))
+summary_tab_eye_2$Trend = rep(c(rep("Increasing",4), rep("Decreasing",4)),3)
+
+summary_tab_eye_2[1:4,2]= c(mean(May_merged_cleaned[May_merged_cleaned$Slopes_eye>0,20]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_eye>0,23]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_eye>0,26]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_eye>0,29]))
+summary_tab_eye_2[5:8,2]= c(mean(May_merged_cleaned[May_merged_cleaned$Slopes_eye<=0,20]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_eye<=0,23]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_eye<=0,26]),
+                                 mean(May_merged_cleaned[May_merged_cleaned$Slopes_eye<=0,29]))
+
+summary_tab_eye_2[9:12,2]= c(mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye>0,20]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye>0,23]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye>0,26]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye>0,29]))
+
+summary_tab_eye_2[13:24,2]= c(mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye<=0,20]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye<=0,23]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye<=0,26]),
+                                 mean(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye<=0,29]))
+
+summary_tab_eye_2[17:20,2]= c(mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye>0,20]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye>0,23]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye>0,26]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye>0,29]))
+
+summary_tab_eye_2[21:24,2]= c(mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye<=0,20]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye<=0,23]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye<=0,26]),
+                                 mean(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye<=0,29]))
+
+summary_tab_eye_2[1:4,3]= c(se(May_merged_cleaned[May_merged_cleaned$Slopes_eye>0,20]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_eye>0,23]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_eye>0,26]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_eye>0,29]))
+summary_tab_eye_2[5:8,3]= c(se(May_merged_cleaned[May_merged_cleaned$Slopes_eye<=0,20]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_eye<=0,23]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_eye<=0,26]),
+                                 se(May_merged_cleaned[May_merged_cleaned$Slopes_eye<=0,29]))
+
+summary_tab_eye_2[9:12,3]= c(se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye>0,20]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye>0,23]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye>0,26]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye>0,29]))
+summary_tab_eye_2[13:16,3]= c(se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye<=0,20]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye<=0,23]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye<=0,26]),
+                                 se(JJ_merged_cleaned[JJ_merged_cleaned$Slopes_eye<=0,29]))
+summary_tab_eye_2[17:20,3]= c(se(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye>0,20]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye>0,23]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye>0,26]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye>0,29]))
+summary_tab_eye_2[21:24,3]= c(se(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye<=0,20]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye<=0,23]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye<=0,26]),
+                                 se(ND_merged_cleaned[ND_merged_cleaned$Slopes_eye<=0,29]))
+
+tiff("Plot_eye_2.tiff",
+     width =11, height =7.0,
+         units = "in", res =300)
+ggplot(summary_tab_eye_2, aes(x = TimePoint, y = Average, colour = Season)) + 
+  facet_wrap(~Trend)+
+  geom_errorbar(aes(ymin = Average-SE, ymax = Average+SE), width = 0.2,size =1) +
+  geom_line(aes(group = Season))+
+  geom_point(size = 4) + theme_bw()+ylab(expression("T"['eye']*~(degree*C) ))+xlab("Time")+
+  scale_color_manual(values = c("green","red", "blue"))+
+  guides(linetype = guide_legend(override.aes = list(size = 3)))+
+  theme(
+      axis.text=element_text(size=19), axis.title = element_text(size = 32),
+      legend.title = element_blank(), legend.text = element_text(size =24),
+      legend.key.width= unit(1.1, 'cm'),
+      legend.position = c(.902, 0.105),
+      panel.border = element_rect(colour = "black", fill=NA),
+      legend.background = element_blank(),
+      legend.box.background = element_rect(colour = "black"),
+      strip.text.x = element_text(size = 30))
+dev.off()
+```
+
+```{r Plotting Humidity and Temperature, message=F, warning=F, echo=F,eval =F}
+weather_summary = mixed.dat_ear_2 %>% group_by(Season) %>%
+  summarize(AvgTa = mean(Ta), AvgHumid = mean(Humid),SETa = se(Ta),SEHumid = se(Humid))
+
+weather_summary$Season = c("Summer", "Spring", "Winter")
+weather_summary = weather_summary %>% mutate(Season = factor(Season, level = c("Spring", "Summer", "Winter")))
+
+ggplot(weather_summary, aes(x = Season, y = AvgTa)) + 
+  geom_errorbar(aes(ymin = AvgTa-SETa, ymax = AvgTa+SETa), width = 0.2) +
+  geom_line(aes(group = Season))+
+  geom_point() + theme_bw() +geom_hline(yintercept = 0)+
+  ylab(expression("T"['atmospheric']*" (C)"))+xlab("Season")+
+  theme(
+      axis.text=element_text(size=28), axis.title = element_text(size = 29),
+      legend.title = element_text(size= 24), legend.text = element_text(size =24),
+      legend.position = c(.87, .867),
+      panel.border = element_rect(colour = "black", fill=NA),
+      legend.background = element_blank(),
+      legend.box.background = element_rect(colour = "black"))
+  
+
+ggplot(weather_summary, aes(x = Season, y = AvgHumid)) + 
+  geom_errorbar(aes(ymin = AvgHumid-SEHumid, ymax = AvgHumid+SEHumid), width = 0.2) +
+  geom_line(aes(group = Season))+
+  geom_point() + theme_bw()+ylab(expression("Humidity"*" (%)"))+xlab("Season")+
+  theme(
+      axis.text=element_text(size=28), axis.title = element_text(size = 29),
+      legend.title = element_text(size= 24), legend.text = element_text(size =24),
+      legend.position = c(.87, .867),
+      panel.border = element_rect(colour = "black", fill=NA),
+      legend.background = element_blank(),
+      legend.box.background = element_rect(colour = "black"))
 ```
