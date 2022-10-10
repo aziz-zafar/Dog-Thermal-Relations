@@ -77,6 +77,7 @@ imputeapply = function(data){
   data.imputed
 }
 ```
+
 ```{r in_to_cm,echo=F}
 in_to_cm = function(data_column){
   return(data_column*2.54)
@@ -94,6 +95,7 @@ library(quantreg)
 library(caret)
 library(car)
 library(tidyverse)
+library(lmtest)
 #JJ_ear = read_xlsx("June-July trials/June-July dog exercise trial data (ear temps).xlsx")
 #JJ_ear = JJ_ear[-c(61:62),]
 #JJ_regular = read_xlsx("June-July trials/June-July trial regular imaging data.xlsx")
@@ -128,12 +130,22 @@ formula1 = as.formula(paste("Slopes_ear ~", paste(colnames(JJ_merged_cleaned)[2:
 #### Ear Temps
 print("June July EAR Temperatures")
 lm1 = lm(formula1, data = JJ_merged_cleaned)
+cooksd <- cooks.distance(lm1)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 1, col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>1, names(cooksd),""), col="red")
+stud_residuals = studres(lm1)
+plot(stud_residuals)
+shapiro.test(resid(lm1))
+hist(resid(lm1))
+
 table = summary(lm1)
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 AIC1 = stepAIC(lm1, trace = F, direction = "both")
 print("June July EAR Temperatures -- BEST SUBSET")
 #AIC
+lrtest(lm1, lm(Slopes_ear ~ ., data=AIC1$model))
 table = summary(lm(Slopes_ear ~ ., data=AIC1$model))
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
@@ -149,12 +161,22 @@ formula2 = as.formula(paste("Slopes_eye ~", paste(colnames(JJ_merged_cleaned)[2:
 print("June July EYE Temperatures")
 lmEye = lm(formula2, data =JJ_merged_cleaned)
 table = summary(lmEye)
+cooksd <- cooks.distance(lmEye)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 1, col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>1, names(cooksd),""), col="red")
+stud_residuals = studres(lmEye)
+plot(stud_residuals)
+shapiro.test(resid(lmEye))
+hist(resid(lmEye))
+
+
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 AIC2 = stepAIC(lmEye, trace = F, direction = "both")
 #AIC
 print("June July EYE Temperatures -- BEST SUBSET")
-
+lrtest(lmEye, lm(Slopes_eye ~., data = AIC2$model))
 table =summary(lm(Slopes_eye ~., data = AIC2$model))
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
@@ -170,12 +192,21 @@ formula3 = as.formula(paste("Slopes_mouth ~", paste(colnames(JJ_merged_cleaned)[
 lmMouth = lm(formula3, data =JJ_merged_cleaned)
 print("June July MOUTH Temperatures")
 table = summary(lmMouth)
+cooksd <- cooks.distance(lmMouth)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 1, col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>1, names(cooksd),""), col="red")
+stud_residuals = studres(lmMouth)
+plot(stud_residuals)
+shapiro.test(resid(lmMouth))
+hist(resid(lmMouth))
+
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 AIC3 = stepAIC(lmMouth, trace = F, direction = "both")
 print("June July MOUTH Temperatures -- BEST SUBSET")
-table = summary(lm(Slopes_mouth ~., 
-    data = AIC3$model))
+lrtest(lmMouth, lm(Slopes_mouth ~., data = AIC3$model))
+table = summary(lm(Slopes_mouth ~., data = AIC3$model))
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 #### Nose temps
@@ -188,13 +219,21 @@ formula4 = as.formula(paste("Slopes_nose ~", paste(colnames(JJ_merged_cleaned)[2
                             collapse = " +"), sep = ""))
 lmNose = lm(formula4, data =JJ_merged_cleaned)
 print("June July NOSE Temperatures")
+cooksd <- cooks.distance(lmNose)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 1, col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>1, names(cooksd),""), col="red")
+stud_residuals = studres(lmNose)
+plot(stud_residuals)
+shapiro.test(resid(lmNose))
+hist(resid(lmNose))
 table = summary(lmNose)
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 AIC4 = stepAIC(lmNose, trace =F, direction = "both")
 print("June July NOSE Temperatures -- BEST SUBSET")
-table = summary(lm(Slopes_nose ~., 
-    data = AIC4$model))
+lrtest(lmNose, lm(Slopes_nose ~., data = AIC4$model))
+table = summary(lm(Slopes_nose ~., data = AIC4$model))
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 ```
@@ -229,9 +268,18 @@ formula1 = as.formula(paste("Slopes_ear ~", paste(colnames(May_merged_cleaned)[2
                             collapse = " +"), sep = ""))
 lm1 = lm(formula1, data = May_merged_cleaned)
 print("May EAR Temperatures")
-#summary(lm1)
+cooksd <- cooks.distance(lm1)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 1, col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>1, names(cooksd),""), col="red")
+stud_residuals = studres(lm1)
+plot(stud_residuals)
+shapiro.test(resid(lm1))
+hist(resid(lm1))
+#ummary(lm1)
 AIC1 = stepAIC(lm1, trace = F, direction = "both")
 print("May EAR Temperatures -- BEST SUBSET")
+lrtest(lm1, lm(Slopes_ear ~., data = AIC1$model))
 table = summary(lm(Slopes_ear ~., data = AIC1$model))
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
@@ -245,11 +293,20 @@ formula2 = as.formula(paste("Slopes_nose ~", paste(colnames(May_merged_cleaned)[
                             collapse = " +"), sep = ""))
 lm2 = lm(formula2, data = May_merged_cleaned)
 print("May NOSE Temperatures")
+cooksd <- cooks.distance(lm2)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 1, col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>1, names(cooksd),""), col="red")
+stud_residuals = studres(lm2)
+plot(stud_residuals)
+shapiro.test(resid(lm2))
+hist(resid(lm2))
 table = summary(lm2)
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 AIC2 = stepAIC(lm2, trace = F, direction = "both")
 print("May NOSE Temperatures -- BEST SUBSET")
+lrtest(lm2, lm(Slopes_nose ~., data = AIC2$model))
 table = summary(lm(Slopes_nose ~., data = AIC2$model))
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
@@ -263,11 +320,20 @@ formula3 = as.formula(paste("Slopes_eye ~", paste(colnames(May_merged_cleaned)[2
                             collapse = " +"), sep = ""))
 lm3 = lm(formula3, data = May_merged_cleaned)
 print("May EYE Temperatures")
+cooksd <- cooks.distance(lm3)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 1, col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>1, names(cooksd),""), col="red")
+stud_residuals = studres(lm3)
+plot(stud_residuals)
+shapiro.test(resid(lm3))
+hist(resid(lm3))
 table = summary(lm3)
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 AIC3 = stepAIC(lm3, trace = F, direction = "both")
 print("May EYE Temperatures -- BEST SUBSET")
+lrtest(lm3, lm(Slopes_eye ~., data = AIC3$model))
 table = summary(lm(Slopes_eye ~., data = AIC3$model))
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
@@ -280,11 +346,20 @@ May_merged_cleaned = cbind(May_merged_cleaned,
 formula4 = as.formula(paste("Slopes_mouth ~", paste(colnames(May_merged_cleaned)[2:14],collapse = " +"), sep = ""))
 lm4 = lm(formula4, data = May_merged_cleaned)
 print("May MOUTH Temperatures")
+cooksd <- cooks.distance(lm4)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 1, col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>1, names(cooksd),""), col="red")
+stud_residuals = studres(lm4)
+plot(stud_residuals)
+shapiro.test(resid(lm4))
+hist(resid(lm4))
 table = summary(lm4)
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 AIC4 = stepAIC(lm4, trace = F, direction = "both")
 print("May MOUTH Temperatures -- BEST SUBSET")
+lrtest(lm4, lm(Slopes_mouth ~., data = AIC4$model))
 table = summary(lm(Slopes_mouth ~., data = AIC4$model))
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
@@ -329,11 +404,20 @@ formula1 = as.formula(paste("Slopes_ear ~", paste(colnames(ND_merged_cleaned)[2:
                             collapse = " +"), sep = ""))
 lm1 = lm(formula1, data = ND_merged_cleaned)
 print("WINTER EAR Temperatures")
+cooksd <- cooks.distance(lm1)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 1, col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>1, names(cooksd),""), col="red")
+stud_residuals = studres(lm1)
+plot(stud_residuals)
+shapiro.test(resid(lm1))
+hist(resid(lm1))
 table = summary(lm1)
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 AIC1 = stepAIC(lm1, trace = F, direction = "both")
 print("WINTER EAR Temperatures -- BEST SUBSET")
+lrtest(lm1, lm(Slopes_ear ~., data = AIC1$model))
 table = summary(lm(Slopes_ear ~., data = AIC1$model))
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
@@ -347,12 +431,21 @@ ND_merged_cleaned = cbind(ND_merged_cleaned,
 formula2 = as.formula(paste("Slopes_nose ~", paste(colnames(ND_merged_cleaned)[2:14], 
                             collapse = " +"), sep = ""))
 lm2 = lm(formula2, data = ND_merged_cleaned)
+cooksd <- cooks.distance(lm2)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 1, col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>1, names(cooksd),""), col="red")
+stud_residuals = studres(lm2)
+plot(stud_residuals)
+shapiro.test(resid(lm2))
+hist(resid(lm2))
 print("WINTER NOSE Temperatures")
 table = summary(lm2)
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 AIC2 = stepAIC(lm2, trace = F, direction = "both")
 print("WINTER NOSE Temperatures -- BEST SUBSET")
+lrtest(lm2, lm(Slopes_nose~., data = AIC2$model))
 table = summary(lm(Slopes_nose~., data = AIC2$model))
 #table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
@@ -367,11 +460,20 @@ formula3 = as.formula(paste("Slopes_eye ~", paste(colnames(ND_merged_cleaned)[2:
                             collapse = " +"), sep = ""))
 lm3 = lm(formula3, data = ND_merged_cleaned)
 print("WINTER EYE Temperatures")
+cooksd <- cooks.distance(lm3)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 1, col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>1, names(cooksd),""), col="red")
+stud_residuals = studres(lm3)
+plot(stud_residuals)
+shapiro.test(resid(lm3))
+hist(resid(lm3))
 table = summary(lm3)
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 AIC3 = stepAIC(lm3, trace = F, direction = "both")
 print("WINTER EYE Temperatures -- BEST SUBSET")
+lrtest(lm3, lm(Slopes_eye~., data = AIC3$model))
 table = summary(lm(Slopes_eye~., data = AIC3$model))
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
@@ -386,11 +488,20 @@ formula4 = as.formula(paste("Slopes_mouth ~", paste(colnames(ND_merged_cleaned)[
                             collapse = " +"), sep = ""))
 lm4 = lm(formula4, data = ND_merged_cleaned)
 print("WINTER MOUTH Temperatures")
+cooksd <- cooks.distance(lm4)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 1, col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>1, names(cooksd),""), col="red")
+stud_residuals = studres(lm4)
+plot(stud_residuals)
+shapiro.test(resid(lm4))
+hist(resid(lm4))
 table = summary(lm4)
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
 AIC4 = stepAIC(lm4, trace = F, direction = "both")
 print("WINTER MOUTH Temperatures -- BEST SUBSET")
+lrtest(lm4, lm(Slopes_mouth~., data = AIC4$model))
 table = summary(lm(Slopes_mouth~., data = AIC4$model))
 table$coefficients[,4] = p.adjust(table$coefficients[,4], method= "BH")
 table
